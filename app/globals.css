@@ -1,0 +1,822 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+
+    --radius: 0.625rem;
+
+    /* Dashboard tokens (Kravio), as RGB channels for Tailwind's kv-* colors. */
+    --kv-bg: 248 248 248;
+    --kv-fg: 31 41 55;
+    --kv-card: 255 255 255;
+    --kv-secondary: 247 247 247;
+    --kv-secondary-fg: 75 85 99;
+    --kv-muted: 246 246 246;
+    --kv-muted-fg: 107 114 128;
+    --kv-subtle: 156 163 175;
+    --kv-cell: 82 82 91;
+    --kv-accent: 243 244 246;
+    --kv-success: 5 150 105;
+    --kv-destructive: 239 68 68;
+    --kv-border: 229 231 235;
+    --kv-ring: 156 163 175;
+    --kv-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --kv-primary-gradient: linear-gradient(180deg, #37475d 0%, #1f2937 64.7%);
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+  }
+}
+
+.bd-design-surface {
+  background: var(--bd-page-bg, #fff);
+  color: var(--bd-page-text, #18181b);
+  font-family: var(--bd-body-font, ui-sans-serif, system-ui, sans-serif);
+}
+
+.bd-design-surface :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--bd-heading-font, ui-sans-serif, system-ui, sans-serif);
+}
+
+@layer components {
+  /* Inside the dashboard and admin, cards run full width but a field stops
+     at a readable width. :where() keeps this at the lowest specificity so a
+     width set on the field itself (w-[140px], max-w-none, …) still wins. */
+  .kv-fields :where(.kv-field) {
+    max-width: 560px;
+  }
+  .kv-fields :where(textarea.kv-field) {
+    max-width: 720px;
+  }
+  /* Editors (post, product, course…) lay fields out in their own columns;
+     there a field fills its column. Same specificity, later in source. */
+  .kv-fields :where(.kv-editor) :where(.kv-field) {
+    max-width: none;
+  }
+
+  .bd-block-style {
+    margin-top: var(--bd-block-margin-top, 0px);
+    margin-bottom: var(--bd-block-margin-bottom, 0px);
+    border-radius: var(--bd-block-radius, var(--bd-radius, 8px));
+    background-color: var(--bd-block-bg);
+    color: var(--bd-block-color);
+    border: var(--bd-block-border, 0 solid transparent);
+    box-shadow: var(--bd-block-shadow, none);
+    text-align: var(--bd-block-text-align, revert);
+    padding: var(--bd-block-padding-top, 0px) var(--bd-block-padding-right, 0px)
+      var(--bd-block-padding-bottom, 0px) var(--bd-block-padding-left, 0px);
+    transition:
+      background-color 160ms ease,
+      color 160ms ease,
+      padding 160ms ease,
+      margin 160ms ease,
+      border-radius 160ms ease;
+  }
+
+  /* Tighten the default section padding of every block to 5px on all sides
+     (top/bottom/left/right). This targets each block's content root only —
+     inner element padding (buttons, cards, icons) is untouched. Users can add
+     more spacing per block via the Style tab (which pads the wrapper above). */
+  .bd-block-style > * {
+    padding: 5px !important;
+  }
+
+  /* Device preview narrows the builder canvas without narrowing the browser
+     viewport. These hooks make navigation blocks follow the canvas width. */
+  .bd-force-mobile .bd-header-inner {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 0.875rem 1rem !important;
+  }
+
+  .bd-force-mobile .bd-header-inner.bd-header-hamburger {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .bd-force-mobile .bd-header-mobile-menu {
+    display: block !important;
+  }
+
+  .bd-force-mobile :is(.bd-header-desktop-nav, .bd-header-desktop-cta) {
+    display: none !important;
+  }
+
+  .bd-force-mobile :is(.bd-header-direct-nav, .bd-header-direct-cta) {
+    width: 100%;
+  }
+
+  .bd-force-mobile .bd-header-direct-nav .bd-header-nav {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start !important;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    scrollbar-width: none;
+  }
+
+  .bd-force-mobile .bd-header-direct-nav .bd-header-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bd-force-mobile .bd-footer-shell {
+    padding: 2.5rem 1.25rem !important;
+  }
+
+  .bd-force-mobile :is(.bd-footer-grid, .bd-footer-simple) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .bd-force-mobile :is(.bd-footer-cta, .bd-footer-minimal, .bd-footer-bottom) {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .bd-force-mobile .bd-footer-cta > a {
+    width: 100%;
+  }
+
+  .bd-block-style :where(h1, h2, h3) {
+    color: var(--bd-block-text-color, inherit) !important;
+    font-size: var(--bd-block-heading-size, revert) !important;
+  }
+
+  .bd-block-style :where(p, li) {
+    color: var(--bd-block-text-color, inherit) !important;
+    font-size: var(--bd-block-body-size, revert) !important;
+  }
+
+  .bd-visible-desktop,
+  .bd-visible-tablet,
+  .bd-visible-mobile,
+  .bd-visible-desktop-tablet,
+  .bd-visible-tablet-mobile {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .bd-visible-desktop,
+    .bd-visible-desktop-tablet {
+      display: block;
+    }
+  }
+
+  @media (min-width: 640px) and (max-width: 1023px) {
+    .bd-visible-tablet,
+    .bd-visible-desktop-tablet,
+    .bd-visible-tablet-mobile {
+      display: block;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .bd-visible-mobile,
+    .bd-visible-tablet-mobile {
+      display: block;
+    }
+  }
+
+  .bd-force-tablet.bd-visible-tablet,
+  .bd-force-tablet.bd-visible-desktop-tablet,
+  .bd-force-tablet.bd-visible-tablet-mobile,
+  .bd-force-mobile.bd-visible-mobile,
+  .bd-force-mobile.bd-visible-tablet-mobile {
+    display: block !important;
+  }
+
+  .bd-force-tablet.bd-visible-desktop,
+  .bd-force-tablet.bd-visible-mobile,
+  .bd-force-mobile.bd-visible-desktop,
+  .bd-force-mobile.bd-visible-tablet,
+  .bd-force-mobile.bd-visible-desktop-tablet {
+    display: none !important;
+  }
+
+  .bd-rich-text {
+    font-size: var(--bd-block-body-size, 1rem);
+    line-height: 1.75;
+  }
+
+  .bd-rich-text :where(p) {
+    margin: 0.5rem 0;
+  }
+
+  .bd-rich-text :where(ul, ol) {
+    margin: 0.75rem 0;
+    padding-left: 1.25rem;
+  }
+
+  .bd-rich-text :where(ul) {
+    list-style: disc;
+  }
+
+  .bd-rich-text :where(ol) {
+    list-style: decimal;
+  }
+
+  .bd-rich-text :where(a) {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .bd-rich-text :where(strong) {
+    font-weight: 700;
+  }
+
+  .blog-tiptap-editor :where(p),
+  .blog-post-content :where(p) {
+    margin: 0.85rem 0;
+  }
+
+  .blog-tiptap-editor :where(h2),
+  .blog-post-content :where(h2) {
+    margin: 2rem 0 0.85rem;
+    color: rgb(9 9 11);
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .blog-tiptap-editor :where(h3),
+  .blog-post-content :where(h3) {
+    margin: 1.5rem 0 0.65rem;
+    color: rgb(24 24 27);
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  /* Offset anchored headings so they clear the sticky site header */
+  .blog-post-content :where(h2, h3) {
+    scroll-margin-top: 6rem;
+  }
+
+  .blog-tiptap-editor :where(ul, ol),
+  .blog-post-content :where(ul, ol) {
+    margin: 1rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .blog-tiptap-editor :where(ul),
+  .blog-post-content :where(ul) {
+    list-style: disc;
+  }
+
+  .blog-tiptap-editor :where(ol),
+  .blog-post-content :where(ol) {
+    list-style: decimal;
+  }
+
+  .blog-tiptap-editor :where(li),
+  .blog-post-content :where(li) {
+    margin: 0.35rem 0;
+  }
+
+  .blog-tiptap-editor :where(blockquote),
+  .blog-post-content :where(blockquote) {
+    margin: 1.5rem 0;
+    border-left: 3px solid rgb(212 212 216);
+    padding-left: 1rem;
+    color: rgb(63 63 70);
+    font-style: italic;
+  }
+
+  .blog-tiptap-editor :where(a),
+  .blog-post-content :where(a) {
+    color: rgb(29 78 216);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .blog-tiptap-editor :where(code),
+  .blog-post-content :where(code) {
+    border-radius: 0.35rem;
+    background: rgb(244 244 245);
+    padding: 0.1rem 0.35rem;
+    color: rgb(39 39 42);
+    font-size: 0.9em;
+  }
+
+  .blog-tiptap-editor :where(pre),
+  .blog-post-content :where(pre) {
+    margin: 1.25rem 0;
+    overflow-x: auto;
+    border-radius: 0.75rem;
+    background: rgb(24 24 27);
+    padding: 1rem;
+    color: white;
+  }
+
+  .blog-tiptap-editor :where(pre code),
+  .blog-post-content :where(pre code) {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+  }
+
+  .blog-tiptap-editor :where(img),
+  .blog-post-content :where(img) {
+    display: block;
+    margin: 1.5rem auto;
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.75rem;
+  }
+
+  .blog-tiptap-editor :where(img.ProseMirror-selectednode) {
+    outline: 2px solid rgb(59 130 246);
+    outline-offset: 2px;
+  }
+
+  .blog-tiptap-editor :where(hr),
+  .blog-post-content :where(hr) {
+    margin: 2rem 0;
+    border: 0;
+    border-top: 1px solid rgb(228 228 231);
+  }
+
+  .blog-tiptap-editor :where(hr.ProseMirror-selectednode) {
+    border-top-color: rgb(59 130 246);
+  }
+
+  /* Empty-node placeholder */
+  .blog-tiptap-editor :where(.is-empty)::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: rgb(161 161 170);
+    pointer-events: none;
+  }
+
+  /* Selection bubble menu */
+  .blog-bubble-menu {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    border-radius: 0.625rem;
+    border: 1px solid rgb(228 228 231);
+    background: rgb(255 255 255);
+    padding: 0.25rem;
+    box-shadow: 0 12px 28px -10px rgb(0 0 0 / 0.3);
+  }
+
+  /* Slash command menu */
+  .blog-slash-popup {
+    animation: blog-slash-in 0.12s ease-out;
+  }
+
+  @keyframes blog-slash-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  /* Marquee block: smooth left/right scrolling. Items are rendered twice so
+     animating from 0 to -50% loops seamlessly. */
+  @keyframes bd-marquee-left {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes bd-marquee-right {
+    from {
+      transform: translateX(-50%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  .bd-marquee-track {
+    animation: bd-marquee-left var(--bd-marquee-duration, 30s) linear infinite;
+    will-change: transform;
+  }
+  .bd-marquee-track-right {
+    animation-name: bd-marquee-right;
+  }
+  .bd-marquee-pause:hover .bd-marquee-track {
+    animation-play-state: paused;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bd-marquee-track {
+      animation-duration: 120s;
+    }
+  }
+
+  .blog-slash-menu {
+    width: 17rem;
+    max-height: 19rem;
+    overflow-y: auto;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(228 228 231);
+    background: rgb(255 255 255);
+    padding: 0.375rem;
+    box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.35);
+  }
+
+  .blog-slash-empty {
+    width: 17rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(228 228 231);
+    background: rgb(255 255 255);
+    padding: 0.75rem;
+    font-size: 0.8125rem;
+    color: rgb(113 113 122);
+    box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.35);
+  }
+
+  .blog-slash-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.625rem;
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    transition: background 0.1s ease;
+  }
+
+  .blog-slash-item.is-active {
+    background: rgb(244 244 245);
+  }
+
+  .blog-slash-icon {
+    display: flex;
+    height: 1.875rem;
+    width: 1.875rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.4rem;
+    border: 1px solid rgb(228 228 231);
+    background: rgb(250 250 250);
+    color: rgb(63 63 70);
+  }
+
+  .blog-slash-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .blog-slash-title {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: rgb(24 24 27);
+  }
+
+  .blog-slash-desc {
+    font-size: 0.6875rem;
+    color: rgb(161 161 170);
+  }
+
+  @media (max-width: 1023px) {
+    .bd-block-style {
+      margin-top: var(--bd-tablet-margin-top, var(--bd-block-margin-top, 0px));
+      margin-bottom: var(
+        --bd-tablet-margin-bottom,
+        var(--bd-block-margin-bottom, 0px)
+      );
+      border-radius: var(--bd-tablet-radius, var(--bd-block-radius));
+      background-color: var(--bd-tablet-bg, var(--bd-block-bg));
+      color: var(--bd-tablet-color, var(--bd-block-color));
+      padding: var(--bd-tablet-padding-top, var(--bd-block-padding-top, 0px))
+        var(--bd-tablet-padding-right, var(--bd-block-padding-right, 0px))
+        var(--bd-tablet-padding-bottom, var(--bd-block-padding-bottom, 0px))
+        var(--bd-tablet-padding-left, var(--bd-block-padding-left, 0px));
+      --bd-block-text-color: var(
+        --bd-tablet-text-color,
+        var(--bd-block-text-color)
+      );
+      --bd-block-heading-size: var(
+        --bd-tablet-heading-size,
+        var(--bd-block-heading-size)
+      );
+      --bd-block-body-size: var(
+        --bd-tablet-body-size,
+        var(--bd-block-body-size)
+      );
+    }
+  }
+
+  @media (max-width: 639px) {
+    .bd-block-style {
+      margin-top: var(
+        --bd-mobile-margin-top,
+        var(--bd-tablet-margin-top, var(--bd-block-margin-top, 0px))
+      );
+      margin-bottom: var(
+        --bd-mobile-margin-bottom,
+        var(--bd-tablet-margin-bottom, var(--bd-block-margin-bottom, 0px))
+      );
+      border-radius: var(
+        --bd-mobile-radius,
+        var(--bd-tablet-radius, var(--bd-block-radius))
+      );
+      background-color: var(
+        --bd-mobile-bg,
+        var(--bd-tablet-bg, var(--bd-block-bg))
+      );
+      color: var(--bd-mobile-color, var(--bd-tablet-color, var(--bd-block-color)));
+      padding: var(
+          --bd-mobile-padding-top,
+          var(--bd-tablet-padding-top, var(--bd-block-padding-top, 0px))
+        )
+        var(
+          --bd-mobile-padding-right,
+          var(--bd-tablet-padding-right, var(--bd-block-padding-right, 0px))
+        )
+        var(
+          --bd-mobile-padding-bottom,
+          var(--bd-tablet-padding-bottom, var(--bd-block-padding-bottom, 0px))
+        )
+        var(
+          --bd-mobile-padding-left,
+          var(--bd-tablet-padding-left, var(--bd-block-padding-left, 0px))
+        );
+      --bd-block-text-color: var(
+        --bd-mobile-text-color,
+        var(--bd-tablet-text-color, var(--bd-block-text-color))
+      );
+      --bd-block-heading-size: var(
+        --bd-mobile-heading-size,
+        var(--bd-tablet-heading-size, var(--bd-block-heading-size))
+      );
+      --bd-block-body-size: var(
+        --bd-mobile-body-size,
+        var(--bd-tablet-body-size, var(--bd-block-body-size))
+      );
+    }
+  }
+
+  .bd-force-tablet {
+    margin-top: var(--bd-tablet-margin-top, var(--bd-block-margin-top, 0px));
+    margin-bottom: var(
+      --bd-tablet-margin-bottom,
+      var(--bd-block-margin-bottom, 0px)
+    );
+    border-radius: var(--bd-tablet-radius, var(--bd-block-radius));
+    background-color: var(--bd-tablet-bg, var(--bd-block-bg));
+    color: var(--bd-tablet-color, var(--bd-block-color));
+    padding: var(--bd-tablet-padding-top, var(--bd-block-padding-top, 0px))
+      var(--bd-tablet-padding-right, var(--bd-block-padding-right, 0px))
+      var(--bd-tablet-padding-bottom, var(--bd-block-padding-bottom, 0px))
+      var(--bd-tablet-padding-left, var(--bd-block-padding-left, 0px));
+    --bd-block-text-color: var(
+      --bd-tablet-text-color,
+      var(--bd-block-text-color)
+    );
+    --bd-block-heading-size: var(
+      --bd-tablet-heading-size,
+      var(--bd-block-heading-size)
+    );
+    --bd-block-body-size: var(
+      --bd-tablet-body-size,
+      var(--bd-block-body-size)
+    );
+  }
+
+  .bd-force-mobile {
+    margin-top: var(
+      --bd-mobile-margin-top,
+      var(--bd-tablet-margin-top, var(--bd-block-margin-top, 0px))
+    );
+    margin-bottom: var(
+      --bd-mobile-margin-bottom,
+      var(--bd-tablet-margin-bottom, var(--bd-block-margin-bottom, 0px))
+    );
+    border-radius: var(
+      --bd-mobile-radius,
+      var(--bd-tablet-radius, var(--bd-block-radius))
+    );
+    background-color: var(
+      --bd-mobile-bg,
+      var(--bd-tablet-bg, var(--bd-block-bg))
+    );
+    color: var(--bd-mobile-color, var(--bd-tablet-color, var(--bd-block-color)));
+    padding: var(
+        --bd-mobile-padding-top,
+        var(--bd-tablet-padding-top, var(--bd-block-padding-top, 0px))
+      )
+      var(
+        --bd-mobile-padding-right,
+        var(--bd-tablet-padding-right, var(--bd-block-padding-right, 0px))
+      )
+      var(
+        --bd-mobile-padding-bottom,
+        var(--bd-tablet-padding-bottom, var(--bd-block-padding-bottom, 0px))
+      )
+      var(
+        --bd-mobile-padding-left,
+        var(--bd-tablet-padding-left, var(--bd-block-padding-left, 0px))
+      );
+    --bd-block-text-color: var(
+      --bd-mobile-text-color,
+      var(--bd-tablet-text-color, var(--bd-block-text-color))
+    );
+    --bd-block-heading-size: var(
+      --bd-mobile-heading-size,
+      var(--bd-tablet-heading-size, var(--bd-block-heading-size))
+    );
+    --bd-block-body-size: var(
+      --bd-mobile-body-size,
+      var(--bd-tablet-body-size, var(--bd-block-body-size))
+    );
+  }
+
+  .bd-preview-mobile :where(.md\:grid-cols-2, .md\:grid-cols-3, .lg\:grid-cols-3, .lg\:grid-cols-4) {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+
+  .bd-preview-tablet :where(.lg\:grid-cols-3, .lg\:grid-cols-4) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-kv-border dark:border-zinc-800;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    /* 14px base — the rem-based UI scales to a compact, Notion-like
+       density. DM Sans (via --font-sans) handles the typography. */
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50;
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/*
+ * Tepat satu footer di setiap halaman publik.
+ *
+ * Tiga sumber footer bisa bertemu: blok Footer di halaman, footer global dari
+ * layout, dan footer bawaan renderer. Layout tidak bisa tahu isi halaman di
+ * dalamnya, jadi urutan prioritasnya diputuskan di sini:
+ *   1. Blok Footer milik halaman menang atas semuanya.
+ *   2. Tanpa itu, footer global layout menang atas footer bawaan.
+ * Browser tanpa dukungan :has() jatuh ke perilaku lama (footer bertumpuk),
+ * tidak lebih buruk dari sebelumnya.
+ */
+body:has([data-bd-page-footer]) [data-bd-store-footer] {
+  display: none;
+}
+body:has([data-bd-store-footer]) [data-bd-default-footer] {
+  display: none;
+}
+
+/*
+ * Blok Tombol WhatsApp di kanvas builder.
+ *
+ * Di halaman publik tombolnya `position: fixed` di pojok layar. Di kanvas,
+ * posisi itu akan melayang di atas antarmuka builder, jadi tombolnya
+ * dikembalikan ke alur halaman supaya bisa dipilih dan disunting seperti blok
+ * lain. Placeholder "belum ada nomor" hanya untuk editor; di halaman publik
+ * tombol tanpa nomor tidak tampil sama sekali.
+ */
+[data-bd-editor] [data-bd-float] {
+  position: relative;
+  inset: auto;
+  margin: 1rem auto;
+  display: flex;
+  width: fit-content;
+  opacity: 1;
+  transform: none;
+  pointer-events: none;
+}
+[data-bd-float-placeholder] {
+  display: none;
+}
+[data-bd-editor] [data-bd-float-placeholder] {
+  display: block;
+}
+
+/*
+ * Dashboard surfaces (Kravio).
+ *
+ * The dashboard shell is a light grey canvas with a white main panel; every
+ * section sits in a "frame": a muted card with a faint diagonal hatch and a
+ * white inner card. These helpers carry the parts Tailwind classes cannot say
+ * cleanly — the hatch, dashed rules and the dark gradient used for the active
+ * state of pills, bars and primary buttons.
+ */
+@layer utilities {
+  .kv-frame {
+    position: relative;
+    overflow: clip;
+    border-radius: 12px;
+    background-color: rgb(var(--kv-muted));
+    background-image: url("/dashboard/card-pattern.svg");
+    background-repeat: repeat-y;
+    background-position: center -0.8px;
+    background-size: 1639px 560px;
+    box-shadow: inset 0 0 0 0.8px rgb(var(--kv-border));
+  }
+
+  .kv-gradient {
+    background-image: var(--kv-primary-gradient);
+  }
+
+  .kv-dash-x {
+    height: 1px;
+    background-image: linear-gradient(to right, rgb(var(--kv-border)) 50%, transparent 0);
+    background-size: 8px 1px;
+    background-repeat: repeat-x;
+  }
+
+  .kv-dash-y {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      rgb(var(--kv-border)) 0 4px,
+      transparent 4px 8px
+    );
+  }
+
+  .kv-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .kv-no-scrollbar {
+    scrollbar-width: none;
+  }
+  .kv-no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .kv-app :is(.animate-kv-rise, .animate-kv-fade, .animate-kv-draw, .animate-kv-grow, .animate-kv-pop) {
+      animation: none;
+    }
+  }
+}

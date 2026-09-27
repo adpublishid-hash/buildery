@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "SaaSPlan" ADD COLUMN IF NOT EXISTS "hasAiAssistant" BOOLEAN NOT NULL DEFAULT false;

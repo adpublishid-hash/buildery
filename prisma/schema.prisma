@@ -1,0 +1,3856 @@
+// My Landing — Prisma schema
+// Part 1: auth + roles
+// Part 2: workspaces, members, invitations, uploads
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  STAFF
+  CUSTOMER
+  AFFILIATE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BlockType {
+  HEADER
+  MENU
+  HERO
+  TEXT
+  CUSTOM_HTML
+  COLUMNS
+  IMAGE
+  CTA
+  FEATURE_GRID
+  STATS
+  STEPS
+  PRICING
+  TESTIMONIAL
+  LOGOS
+  GALLERY
+  IMAGE_SLIDER
+  VIDEO
+  FAQ
+  NEWSLETTER
+  BANNER
+  CONTACT_FORM
+  DIVIDER
+  PRODUCT_SHOWCASE
+  COURSE_SHOWCASE
+  BLOG_SHOWCASE
+  MEMBERSHIP_SHOWCASE
+  AFFILIATE_CTA
+  FORM_EMBED
+  BUTTON
+  BIO_PROFILE
+  COUNTDOWN
+  COMPARISON_TABLE
+  MARQUEE
+  FOOTER
+  WHATSAPP_FLOAT
+  MAP
+  TABS
+}
+
+enum AnalyticsEventType {
+  PAGE_VIEW
+  FORM_VIEW
+  VIEW_CONTENT
+  ADD_TO_CART
+  BEGIN_CHECKOUT
+  PURCHASE
+}
+
+enum ProductType {
+  PHYSICAL
+  DIGITAL
+  /// A package of other products, sold at its own price. Its stock is derived
+  /// from what it contains, never stored.
+  BUNDLE
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ProductPricingMode {
+  ONE_TIME
+  SUBSCRIPTION
+}
+
+enum DiscountStackingMode {
+  ADDITIVE
+  OVERRIDE
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  FAILED
+  EXPIRED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum FulfillmentStatus {
+  NOT_REQUIRED
+  UNFULFILLED
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentKind {
+  ORDER
+  ENROLLMENT
+  MEMBERSHIP
+}
+
+enum PaymentWebhookResult {
+  INVALID_BODY
+  BAD_SIGNATURE
+  UNKNOWN_PAYMENT
+  PROCESSED
+  PROCESSING_FAILED
+}
+
+enum PaymentReconciliationResult {
+  SYNCED
+  UNCHANGED
+  NOT_FOUND
+  FAILED
+}
+
+enum FollowUpStatus {
+  OPEN
+  SNOOZED
+  DONE
+}
+
+enum FollowUpPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum FollowUpChannel {
+  EMAIL
+  WHATSAPP
+  PHONE
+  MANUAL
+}
+
+enum AbandonedRecoveryStatus {
+  OPEN
+  CONTACTED
+  SNOOZED
+  RECOVERED
+  IGNORED
+}
+
+enum CurrencySymbolPosition {
+  LEFT
+  RIGHT
+  LEFT_SPACE
+  RIGHT_SPACE
+}
+
+enum PaymentTimeoutUnit {
+  MINUTES
+  HOURS
+  DAYS
+}
+
+enum StockDecrementTiming {
+  CHECKOUT
+  PAID
+}
+
+enum InventoryMovementType {
+  ORDER_RESERVATION
+  ORDER_RELEASE
+  ORDER_FULFILLMENT
+  ORDER_RETURN
+  ORDER_CANCELLATION
+  MANUAL_ADJUSTMENT
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  REFUNDED
+  CANCELLED
+}
+
+enum RefundType {
+  REFUND
+  RETURN
+}
+
+enum ManualPaymentMethodType {
+  BANK_TRANSFER
+  EWALLET
+  QRIS
+  OTHER
+}
+
+enum ManualPaymentProofStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ProductReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+}
+
+enum ShippingMethodType {
+  AUTOMATIC
+  FLAT_RATE
+  FREE
+  PICKUP
+}
+
+enum InboxChannel {
+  WHATSAPP
+}
+
+enum InboxConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  SPAM
+}
+
+enum InboxMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum InboxMessageStatus {
+  RECEIVED
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum WhatsAppProvider {
+  ONESENDER
+  WABA
+  STARSENDER
+}
+
+enum StoreNotificationChannel {
+  EMAIL
+  WHATSAPP
+  TELEGRAM
+}
+
+enum StoreNotificationEvent {
+  ORDER_CREATED
+  PAYMENT_PAID
+  PAYMENT_CANCELLED
+  ABANDONED_CHECKOUT_REMINDER
+  PAYMENT_REMINDER
+  BACK_IN_STOCK
+  LOW_STOCK_ALERT
+  REFUND_REQUESTED
+  REFUND_APPROVED
+  REFUND_REFUNDED
+  REFUND_REJECTED
+  REFUND_CANCELLED
+  COURSE_ENROLLED
+  COURSE_COMPLETED
+  COURSE_ANNOUNCEMENT
+  LIVE_SESSION_REMINDER
+  MEMBERSHIP_WELCOME
+  MEMBERSHIP_RENEWED
+  MEMBERSHIP_EXPIRING
+  MEMBERSHIP_EXPIRED
+  MEMBERSHIP_CANCELLED
+  MEMBERSHIP_PAYMENT_FAILED
+  AFFILIATE_APPLICATION_RECEIVED
+  AFFILIATE_APPROVED
+  AFFILIATE_SALE
+  COMMISSION_APPROVED
+  COMMISSION_REVERSED
+  PAYOUT_PAID
+  ABANDONED_RECOVERY
+  LOW_STOCK
+}
+
+enum StoreNotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LessonType {
+  TEXT
+  VIDEO_EMBED
+  PDF
+  LINK
+}
+
+enum EnrollmentStatus {
+  PENDING
+  ACTIVE
+  CANCELLED
+  COMPLETED
+}
+
+enum CourseDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum CourseAssetKind {
+  VIDEO
+  PDF
+  ATTACHMENT
+}
+
+enum QuizQuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_TEXT
+}
+
+enum AssignmentSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  GRADED
+  RETURNED
+}
+
+enum CourseReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BlogPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BlogPostEventType {
+  VIEW
+  READ_COMPLETE
+  SHARE
+}
+
+enum FormFieldType {
+  TEXT
+  EMAIL
+  PHONE
+  NUMBER
+  URL
+  DATE
+  TEXTAREA
+  SELECT
+  RADIO
+  MULTISELECT
+  CHECKBOX
+  CHECKBOXES
+  FILE
+  CUSTOM
+  REPEATER
+}
+
+enum FormSubmissionStatus {
+  NEW
+  READ
+  ARCHIVED
+  SPAM
+}
+
+enum FormStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum ScheduledJobKind {
+  BLOG_PUBLICATION
+  META_CAPI_FLUSH
+  PAYMENT_RECONCILIATION
+  PAYMENT_EXPIRY_SWEEP
+  ABANDONED_CHECKOUT_SWEEP
+  STORE_NOTIFICATION_RETRY
+  LOW_STOCK_ALERT_SWEEP
+  FORM_DELIVERY_RETRY
+  ABANDONED_SCAN
+  ABANDONED_RECOVERY
+  NOTIFICATION_RETRY
+  WHATSAPP_SEND
+  LOW_STOCK_SCAN
+  ANALYTICS_ROLLUP
+  // Dihapus 15 Sep 2026 (email ringkasan mingguan). Nilainya tetap
+  // dideklarasikan: Postgres tidak bisa menghapus nilai enum, dan baris lama
+  // di ScheduledJob masih memakainya.
+  WEEKLY_REPORT_SWEEP
+  WEEKLY_REPORT
+  INBOX_NOTIFY
+  INBOX_PRUNE
+  PAYMENT_REMINDER_SWEEP
+  STOCK_NOTIFY_SWEEP
+  MEMBERSHIP_LIFECYCLE_SWEEP
+  AFFILIATE_LIFECYCLE_SWEEP
+  WORKSPACE_LIFECYCLE_SWEEP
+  SAAS_BILLING_SWEEP
+}
+
+enum InboxMessageKind {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  STICKER
+  LOCATION
+  UNKNOWN
+}
+
+enum ScheduledJobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  CANCELED
+}
+
+enum FormDeliveryKind {
+  EMAIL
+  WEBHOOK
+  TELEGRAM
+}
+
+enum FormDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum ReferralEvent {
+  CLICK
+  LEAD
+  SALE
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAYOUT_SCHEDULED
+  PAID
+  REVERSED
+}
+
+enum CommissionAdjustmentType {
+  ORDER_REFUND
+  ORDER_CANCELLATION
+  COURSE_REFUND
+  MEMBERSHIP_REFUND
+  MANUAL
+}
+
+enum AffiliateStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+  ARCHIVED
+}
+
+enum AffiliateApprovalMode {
+  AUTO
+  MANUAL
+}
+
+enum AffiliateAttributionModel {
+  FIRST_CLICK
+  LAST_CLICK
+}
+
+enum CommissionSourceType {
+  ORDER
+  ENROLLMENT
+  MEMBERSHIP
+}
+
+enum AffiliatePayoutStatus {
+  DRAFT
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum AffiliatePayoutMethod {
+  BANK_TRANSFER
+  EWALLET
+  OTHER
+}
+
+enum AffiliateCreativeType {
+  LINK
+  IMAGE
+  COPY
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+enum MembershipLevel {
+  FREE
+  BASIC
+  PREMIUM
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+enum MembershipGrantSource {
+  FREE_JOIN
+  PAYMENT
+  PRODUCT_PURCHASE
+  MANUAL
+  RENEWAL
+  UPGRADE
+}
+
+enum MembershipEventType {
+  CREATED
+  ACTIVATED
+  RENEWED
+  UPGRADED
+  DOWNGRADED
+  EXTENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum SaaSPlanTier {
+  FREE
+  STARTER
+  PRO
+  BUSINESS
+}
+
+enum SaaSSubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+enum SaaSInvoiceKind {
+  NEW
+  RENEWAL
+  UPGRADE
+}
+
+enum SaaSInvoiceStatus {
+  AWAITING_PAYMENT
+  AWAITING_VERIFICATION
+  PAID
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum AbuseReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum WorkspaceLanguage {
+  ID
+  EN
+}
+
+enum WorkspaceStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_DELETION
+}
+
+enum WorkspaceDomainStatus {
+  UNCONFIGURED
+  PENDING
+  ACTIVE
+  ERROR
+}
+
+enum WorkspaceDomainSslStatus {
+  UNCONFIGURED
+  PENDING
+  ACTIVE
+  ERROR
+}
+
+enum WorkspaceInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+  EXPIRED
+}
+
+enum PageRevisionSource {
+  AUTOSAVE
+  MANUAL
+  PUBLISH
+  RESTORE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  phone         String?
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role      @default(CUSTOMER)
+  deletedAt     DateTime?
+  deleteAfter   DateTime?
+
+  accounts Account[]
+  sessions Session[]
+
+  createdWorkspaces  Workspace[]
+  workspaceMembers   WorkspaceMember[]
+  sentInvitations    WorkspaceInvitation[]
+  workspaceAuditLogs WorkspaceAuditLog[]
+  uploads            UploadFile[]
+  blogPosts          BlogPost[]
+  pageRevisions      PageRevision[]
+  savedSections      SavedSection[]
+  subscription       SaaSSubscription?
+  saasInvoices       SaaSInvoice[]
+  reviewedInvoices   SaaSInvoice[]         @relation("SaaSInvoiceReviewer")
+  siteTemplates      SiteTemplate[]        @relation("SiteTemplateAuthor")
+  platformAuditLogs  PlatformAuditLog[]
+
+  assignedConversations InboxConversation[] @relation("InboxAssignee")
+  inboxNotes            InboxNote[]
+  sentInboxMessages     InboxMessage[]      @relation("InboxMessageAuthor")
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  legacyRefunds Refund[]
+
+  @@index([deletedAt, deleteAfter])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
+// ============================================================
+// Part 2 — Workspaces
+// ============================================================
+
+model Workspace {
+  id                  String            @id @default(cuid())
+  name                String
+  slug                String            @unique
+  logoUrl             String?
+  faviconUrl          String?
+  primaryColor        String            @default("#18181b")
+  customDomain        String?           @unique
+  language            WorkspaceLanguage @default(ID)
+  locale              String            @default("id-ID")
+  timezone            String            @default("Asia/Jakarta")
+  currencyCode        String            @default("IDR")
+  dateFormat          String            @default("DD/MM/YYYY")
+  status              WorkspaceStatus   @default(ACTIVE)
+  suspendedAt         DateTime?
+  deletionRequestedAt DateTime?
+  deleteAfter         DateTime?
+
+  customDomainStatus            WorkspaceDomainStatus    @default(UNCONFIGURED)
+  customDomainVerificationToken String?
+  customDomainVerifiedAt        DateTime?
+  customDomainLastCheckedAt     DateTime?
+  customDomainError             String?
+  customDomainSslStatus         WorkspaceDomainSslStatus @default(UNCONFIGURED)
+  customDomainSslExpiresAt      DateTime?
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  members                WorkspaceMember[]
+  invitations            WorkspaceInvitation[]
+  uploads                UploadFile[]
+  htmlTemplates          HtmlTemplate[]
+  whatsappWebhookEvents  WhatsAppWebhookEvent[]
+  websites               Website[]
+  analytics              AnalyticsEvent[]
+  categories             ProductCategory[]
+  products               Product[]
+  inventoryMovements     InventoryMovement[]
+  customers              Customer[]
+  orders                 Order[]
+  fulfillmentEvents      FulfillmentEvent[]
+  courses                Course[]
+  courseCategories       CourseCategory[]
+  courseReviews          CourseReview[]
+  enrollments            Enrollment[]
+  blogPosts              BlogPost[]
+  blogCategories         BlogCategory[]
+  blogTags               BlogTag[]
+  blogPostEvents         BlogPostEvent[]
+  forms                  Form[]
+  submissions            FormSubmission[]
+  affiliateProgram       AffiliateProgram?
+  affiliates             Affiliate[]
+  referrals              Referral[]
+  commissions            Commission[]
+  commissionAdjustments  CommissionAdjustment[]
+  affiliatePayouts       AffiliatePayout[]
+  affiliateCreatives     AffiliateCreative[]
+  coupons                Coupon[]
+  membershipPlans        MembershipPlan[]
+  customerMemberships    CustomerMembership[]
+  membershipGrants       MembershipGrant[]
+  membershipEvents       MembershipEvent[]
+  integration            IntegrationSetting?
+  reports                AbuseReport[]
+  payments               Payment[]
+  refunds                OrderRefund[]
+  paymentWebhookEvents   PaymentWebhookEvent[]
+  paymentReconciliations PaymentReconciliationEvent[]
+  followUpTasks          FollowUpTask[]
+  abandonedRecoveries    AbandonedCheckoutRecovery[]
+  ecommerceSetting       EcommerceSetting?
+  lmsSetting             LmsSetting?
+  storefrontSetting      StorefrontSetting?
+  storefrontPages        StorefrontPageContent[]
+  manualPaymentMethods   ManualPaymentMethod[]
+  pickupLocations        PickupLocation[]
+  inboxConversations     InboxConversation[]
+  inboxMessages          InboxMessage[]
+  inboxNotes             InboxNote[]
+  customerAddresses      CustomerAddress[]
+  stockNotifications     StockNotification[]
+  carts                  Cart[]
+  bundleItems            ProductBundleItem[]
+  locationStocks         LocationStock[]
+  inboxLabels            InboxLabel[]
+  inboxQuickReplies      InboxQuickReply[]
+  storeNotifications     StoreNotification[]
+  scheduledJobs          ScheduledJob[]
+  metaCapiEvents         MetaCapiEvent[]
+  adPixels               AdPixel[]
+  metaCapiDailyStats     MetaCapiDailyStat[]
+  savedSections          SavedSection[]
+  productReviews         ProductReview[]
+  wishlistItems          WishlistItem[]
+  analyticsDailyStats    AnalyticsDailyStat[]
+  slugHistory            WorkspaceSlugHistory[]
+  auditLogs              WorkspaceAuditLog[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  legacyRefunds Refund[]
+
+  @@index([createdById])
+  @@index([status, deleteAfter])
+}
+
+model WorkspaceMember {
+  id           String     @id @default(cuid())
+  workspaceId  String
+  userId       String
+  role         MemberRole @default(VIEWER)
+  isFavorite   Boolean    @default(false)
+  lastOpenedAt DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model WorkspaceInvitation {
+  id          String                    @id @default(cuid())
+  workspaceId String
+  email       String
+  role        MemberRole                @default(EDITOR)
+  token       String                    @unique
+  invitedById String?
+  status      WorkspaceInvitationStatus @default(PENDING)
+  acceptedAt  DateTime?
+  declinedAt  DateTime?
+  revokedAt   DateTime?
+  expiresAt   DateTime
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User?     @relation(fields: [invitedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([workspaceId, email])
+  @@index([email])
+  @@index([status, expiresAt])
+}
+
+model WorkspaceSlugHistory {
+  id          String @id @default(cuid())
+  workspaceId String
+  slug        String @unique
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+model WorkspaceAuditLog {
+  id          String  @id @default(cuid())
+  workspaceId String
+  actorId     String?
+  action      String
+  targetType  String?
+  targetId    String?
+  summary     String
+  metadata    Json    @default("{}")
+  ipHash      String?
+  userAgent   String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([actorId])
+}
+
+/// Immutable operational history for super-admin changes that are not owned
+/// by one workspace (roles, plans, billing, moderation, and recoveries).
+model PlatformAuditLog {
+  id         String  @id @default(cuid())
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String?
+  summary    String
+  metadata   Json    @default("{}")
+
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId, createdAt])
+}
+
+/// Raw WhatsApp Cloud API deliveries from the earlier integration. Superseded
+/// by the inbox pipeline; declared so the table is described rather than
+/// silently dropped by a schema diff.
+model WhatsAppWebhookEvent {
+  id            String   @id
+  workspaceId   String
+  eventType     String
+  phoneNumberId String?
+  messageId     String?
+  from          String?
+  status        String?
+  payload       Json
+  receivedAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, receivedAt])
+  @@index([messageId])
+  @@index([phoneNumberId])
+}
+
+/// A workspace's library of imported HTML page templates. `data` holds the
+/// parsed block bundle produced by importHtmlTemplateBundle().
+model HtmlTemplate {
+  id          String  @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  data        Json
+  assetCount  Int     @default(0)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, updatedAt])
+}
+
+model UploadFile {
+  id           String  @id @default(cuid())
+  workspaceId  String?
+  uploadedById String?
+  name         String
+  url          String
+  mimeType     String?
+  size         Int?
+
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploadedBy   User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  products     Product[]
+  courseImages Course[]   @relation("CourseImage")
+  blogImages   BlogPost[] @relation("BlogImage")
+
+  createdAt     DateTime         @default(now())
+  variantImages ProductVariant[] @relation("ProductVariantImage")
+
+  @@index([workspaceId])
+  @@index([uploadedById])
+}
+
+// ============================================================
+// Part 3 — Website builder
+// ============================================================
+
+model Website {
+  id           String  @id @default(cuid())
+  workspaceId  String
+  name         String
+  slug         String
+  description  String?
+  homePageId   String?
+  designTokens Json    @default("{}")
+  /// Header dan footer yang dipakai bersama semua halaman. Blok Header/Footer
+  /// yang ditandai `siteWide` membaca dari sini, jadi mengganti satu tautan
+  /// menu cukup sekali — bukan di setiap halaman satu per satu.
+  siteHeader   Json?
+  siteFooter   Json?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pages     Page[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([homePageId])
+}
+
+model Page {
+  id        String     @id @default(cuid())
+  websiteId String
+  title     String
+  slug      String
+  status    PageStatus @default(DRAFT)
+
+  seoTitle        String?
+  metaDescription String?
+  ogImage         String?
+  /// Points search engines at the original when this page duplicates one.
+  canonicalUrl    String?
+  /// Keeps a page out of search results while it is still public.
+  noindex         Boolean @default(false)
+
+  /// Meta standard event fired by the browser pixels when this page is viewed.
+  pixelEvent String?
+  /// Page-only CSS; editing it needs branding.edit.
+  customCss  String? @db.Text
+
+  publishedAt DateTime?
+  editVersion Int       @default(1)
+
+  website     Website           @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  blocks      PageBlock[]
+  revisions   PageRevision[]
+  analytics   AnalyticsEvent[]
+  slugHistory PageSlugHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([websiteId, slug])
+  @@index([websiteId])
+}
+
+model PageRevision {
+  id          String             @id @default(cuid())
+  pageId      String
+  version     Int
+  source      PageRevisionSource @default(MANUAL)
+  blocks      Json
+  blockCount  Int
+  createdById String
+
+  page      Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([pageId, version])
+  @@index([pageId, createdAt])
+  @@index([createdById])
+}
+
+model SavedSection {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  blocks      Json
+  blockCount  Int
+  createdById String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, updatedAt])
+  @@index([createdById])
+}
+
+/// A slug this page used to live at.
+///
+/// Renaming a page used to 404 every link already pointing at it — from search
+/// results, from someone's ad, from a message sent last week. The old address
+/// redirects instead.
+model PageSlugHistory {
+  id        String @id @default(cuid())
+  websiteId String
+  pageId    String
+  slug      String
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([websiteId, slug])
+  @@index([pageId])
+}
+
+model PageBlock {
+  id     String    @id @default(cuid())
+  pageId String
+  type   BlockType
+  order  Int
+  data   Json
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId])
+}
+
+model AnalyticsEvent {
+  id          String             @id @default(cuid())
+  type        AnalyticsEventType @default(PAGE_VIEW)
+  workspaceId String
+  pageId      String?
+  // Set on FORM_VIEW rows. `formStep` is 0 when the form is first seen and
+  // the step number each time the visitor reaches a later one, so the gap
+  // between consecutive steps is where people give up.
+  formId      String?
+  formStep    Int?
+  path        String?
+  referrer    String?
+  userAgent   String?
+
+  /// First-party cookie id. The only way to follow one person from a page view
+  /// through to a purchase — without it a funnel is four unrelated counters.
+  visitorId   String?
+  /// Campaign attribution, captured on the landing hit and carried forward so
+  /// a purchase can be credited to the ad that produced it.
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  /// Money attached to the event, in whole currency units. Cart value for
+  /// ADD_TO_CART, order total for PURCHASE.
+  value       Int?
+  orderId     String?
+  productId   String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  page      Page?     @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  form      Form?     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  order     Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([pageId])
+  @@index([formId, formStep])
+  /// The funnel's hot path: one type over a date range.
+  @@index([workspaceId, type, createdAt])
+  /// Following a single visitor across steps.
+  @@index([workspaceId, visitorId])
+  @@index([orderId])
+}
+
+// ============================================================
+// Part 5 — Online store
+// ============================================================
+
+model ProductCategory {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  products  Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+model Product {
+  id                     String             @id @default(cuid())
+  workspaceId            String
+  categoryId             String?
+  imageId                String?
+  name                   String
+  slug                   String
+  description            String?            @db.Text
+  details                String?            @db.Text
+  type                   ProductType        @default(PHYSICAL)
+  status                 ProductStatus      @default(DRAFT)
+  pricingMode            ProductPricingMode @default(ONE_TIME)
+  price                  Int // whole currency units (e.g. rupiah)
+  costPrice              Int?               @default(0)
+  discountPrice          Int?
+  stock                  Int                @default(0)
+  sku                    String?
+  lowStockThreshold      Int?
+  lowStockAlertedAt      DateTime?
+  lowStockResolvedAt     DateTime?
+  metaTitle              String?
+  metaDescription        String?
+  downloadUrl            String?
+  downloadLabel          String?
+  // Multiple post-purchase access links. Falls back to downloadUrl/Label
+  // for products created before this existed.
+  digitalAccessItems     Json               @default("[]")
+  serviceLocation        String?
+  serviceDurationMinutes Int?
+  eventStartsAt          DateTime?
+  eventEndsAt            DateTime?
+  eventLocation          String?
+  weightGrams            Int?
+  lengthCm               Int?
+  widthCm                Int?
+  heightCm               Int?
+  galleryImageIds        String[]           @default([])
+  /// Option axes a variant is built from, e.g.
+  /// `[{ "name": "Warna", "values": ["Hitam", "Putih"] }]`.
+  /// Variants carry the chosen value per axis in their own `options`, which is
+  /// what lets the storefront show one selector per axis instead of a flat
+  /// list of hand-typed names.
+  variantOptions         Json               @default("[]")
+
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  category           ProductCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  image              UploadFile?         @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  orderItems         OrderItem[]
+  membershipPlans    MembershipPlan[]
+  inventoryMovements InventoryMovement[]
+  refundItems        OrderRefundItem[]
+  variants           ProductVariant[]
+  stockNotifications StockNotification[]
+  cartItems          CartItem[]
+  bundleContents     ProductBundleItem[] @relation("BundleContents")
+  bundledIn          ProductBundleItem[] @relation("BundledIn")
+  reviews            ProductReview[]
+  wishlistItems      WishlistItem[]
+  analyticsEvents    AnalyticsEvent[]
+
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  orderViaWhatsappEnabled Boolean         @default(false)
+  taxExempt               Boolean         @default(false)
+  courses                 Course[]
+  locationStocks          LocationStock[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([categoryId])
+  // Storefront search is ILIKE '%term%', which only a trigram index can serve
+  // without scanning every product in the workspace.
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "Product_name_trgm_idx", type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], map: "Product_description_trgm_idx", type: Gin)
+  // Public storefront lists active products for a workspace.
+  @@index([workspaceId, status])
+  // Low-stock sweeps filter active physical inventory and stock levels.
+  @@index([workspaceId, status, type, stock])
+}
+
+model ProductVariant {
+  id          String  @id @default(cuid())
+  productId   String
+  name        String
+  sku         String?
+  price       Int?
+  costPrice   Int?
+  stock       Int     @default(0)
+  weightGrams Int?
+  imageUrl    String?
+  options     Json    @default("{}")
+  isActive    Boolean @default(true)
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  discountPrice      Int?
+  sortOrder          Int                 @default(0)
+  lowStockThreshold  Int?
+  lowStockAlertedAt  DateTime?
+  imageId            String?
+  image              UploadFile?         @relation("ProductVariantImage", fields: [imageId], references: [id], onDelete: SetNull)
+  stockNotifications StockNotification[]
+  cartItems          CartItem[]
+  bundleItems        ProductBundleItem[]
+  locationStocks     LocationStock[]
+
+  @@unique([productId, name])
+  @@unique([productId, sku])
+  @@index([productId, isActive])
+  @@index([productId, isActive, sortOrder])
+}
+
+model Customer {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  name           String
+  email          String
+  phone          String?
+  password       String?
+  lastLoginAt    DateTime?
+  sessionVersion Int       @default(0)
+
+  workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  orders             Order[]
+  followUps          FollowUpTask[]
+  enrollments        Enrollment[]
+  affiliates         Affiliate[]
+  memberships        CustomerMembership[]
+  coupons            Coupon[]
+  inboxConversations InboxConversation[]
+  storeNotifications StoreNotification[]
+  refunds            OrderRefund[]
+  productReviews     ProductReview[]
+  wishlistItems      WishlistItem[]
+  addresses          CustomerAddress[]
+  carts              Cart[]
+
+  quizAttempts          QuizAttempt[]
+  assignmentSubmissions AssignmentSubmission[]
+  courseNotes           CourseNote[]
+  lessonBookmarks       LessonBookmark[]
+  courseDiscussions     CourseDiscussion[]
+  courseReviews         CourseReview[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+}
+
+model Order {
+  id                         String              @id @default(cuid())
+  workspaceId                String
+  customerId                 String?
+  couponId                   String?
+  orderNumber                String
+  /// Payment landed but fulfilment could not complete (coupon exhausted,
+  /// stock gone). The order is still PAID — the money was taken — and this
+  /// says what a human has to sort out.
+  needsAttention             Boolean             @default(false)
+  attentionReason            String?
+  checkoutRequestId          String?             @unique
+  customerNameSnapshot       String?
+  customerEmailSnapshot      String?
+  customerPhoneSnapshot      String?
+  status                     OrderStatus         @default(PENDING)
+  subtotal                   Int
+  discount                   Int                 @default(0)
+  shippingCost               Int                 @default(0)
+  /// Surcharge for paying the courier on delivery. Kept as its own line so the
+  /// invoice still adds up: subtotal − discount + shipping + COD + tax.
+  codFee                     Int                 @default(0)
+  taxAmount                  Int                 @default(0)
+  total                      Int
+  invoiceNumber              String?
+  note                       String?
+  // Shipping (RajaOngkir). Optional — populated when buyer enters shipping details.
+  shippingProvinceId         String?
+  shippingProvinceName       String?
+  shippingCityId             String?
+  shippingCityName           String?
+  shippingPostalCode         String?
+  shippingAddress            String?             @db.Text
+  shippingRecipientName      String?
+  shippingRecipientPhone     String?
+  shippingCourier            String?
+  shippingService            String?
+  shippingEtd                String?
+  shippingMethodType         ShippingMethodType?
+  shippingMethodName         String?
+  fulfillmentStatus          FulfillmentStatus   @default(NOT_REQUIRED)
+  fulfillmentTrackingCarrier String?
+  fulfillmentTrackingNumber  String?
+  fulfillmentTrackingUrl     String?
+  fulfillmentNote            String?             @db.Text
+  packedAt                   DateTime?
+  shippedAt                  DateTime?
+  deliveredAt                DateTime?
+  // Affiliate attribution captured at checkout, applied on payment success.
+  referralAffiliateId        String?
+  stockReservedAt            DateTime?
+  stockReleasedAt            DateTime?
+
+  workspace             Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer              Customer?                  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  coupon                Coupon?                    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items                 OrderItem[]
+  payment               Payment?
+  referrals             Referral[]
+  commissions           Commission[]
+  followUps             FollowUpTask[]
+  abandonedRecovery     AbandonedCheckoutRecovery?
+  notifications         StoreNotification[]
+  inventoryMovements    InventoryMovement[]
+  analyticsEvents       AnalyticsEvent[]
+  fulfillmentEvents     FulfillmentEvent[]
+  refunds               OrderRefund[]
+  commissionAdjustments CommissionAdjustment[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  taxRateBps      Int       @default(0)
+  taxLabel        String?
+  invoiceIssuedAt DateTime?
+  refundedAmount  Int       @default(0)
+  legacyRefunds   Refund[]
+
+  @@unique([workspaceId, orderNumber])
+  @@unique([workspaceId, invoiceNumber])
+  @@index([workspaceId, needsAttention])
+  @@index([workspaceId, createdAt])
+  // Dashboard order list can filter by status.
+  @@index([workspaceId, status])
+  @@index([workspaceId, stockReservedAt])
+  @@index([workspaceId, fulfillmentStatus])
+}
+
+model AbandonedCheckoutRecovery {
+  id              String                  @id @default(cuid())
+  workspaceId     String
+  orderId         String                  @unique
+  status          AbandonedRecoveryStatus @default(OPEN)
+  attempts        Int                     @default(0)
+  lastContactedAt DateTime?
+  snoozedUntil    DateTime?
+  recoveredAt     DateTime?
+  ignoredAt       DateTime?
+  note            String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  automated          Boolean   @default(false)
+  nextAttemptAt      DateTime?
+  recoveryCouponCode String?
+
+  @@index([workspaceId, status])
+  @@index([snoozedUntil])
+}
+
+model InventoryMovement {
+  id             String                @id @default(cuid())
+  workspaceId    String
+  productId      String
+  orderId        String?
+  actorId        String?
+  type           InventoryMovementType
+  quantityChange Int
+  stockBefore    Int
+  stockAfter     Int
+  reason         String?               @db.Text
+  metadata       Json                  @default("{}")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order     Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([productId, createdAt])
+  @@index([orderId])
+  @@index([actorId])
+  @@index([type, createdAt])
+}
+
+model FulfillmentEvent {
+  id              String            @id @default(cuid())
+  workspaceId     String
+  orderId         String
+  actorId         String?
+  status          FulfillmentStatus
+  trackingCarrier String?
+  trackingNumber  String?
+  trackingUrl     String?
+  note            String?           @db.Text
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([orderId, createdAt])
+  @@index([status, createdAt])
+  @@index([actorId])
+}
+
+model EcommerceSetting {
+  id          String @id @default(cuid())
+  workspaceId String @unique
+
+  currencyCode           String                 @default("IDR")
+  currencyLocale         String                 @default("id-ID")
+  currencySymbol         String                 @default("Rp")
+  currencySymbolPosition CurrencySymbolPosition @default(LEFT)
+  thousandSeparator      String                 @default(".")
+  decimalSeparator       String                 @default(",")
+  decimalPlaces          Int                    @default(0)
+
+  checkoutRequireLogin      Boolean            @default(false)
+  checkoutAutoCreateAccount Boolean            @default(true)
+  checkoutCouponEnabled     Boolean            @default(true)
+  checkoutSellerNoteEnabled Boolean            @default(true)
+  orderNumberPrefix         String?
+  paymentTimeoutValue       Int                @default(24)
+  paymentTimeoutUnit        PaymentTimeoutUnit @default(HOURS)
+
+  defaultDimensionUnit     String               @default("CM")
+  defaultWeightUnit        String               @default("KG")
+  stockDecrementTiming     StockDecrementTiming @default(CHECKOUT)
+  lowStockThreshold        Int                  @default(5)
+  orderSoundNew            Boolean              @default(false)
+  orderSoundPaid           Boolean              @default(false)
+  shippingAggregatorApiKey String?
+  rajaOngkirApiKey         String?
+  shippingOriginCityId     String?
+  shippingOriginCityName   String?
+  shippingCouriers         String[]             @default([])
+  flatRateEnabled          Boolean              @default(false)
+  flatRateName             String               @default("Flat rate")
+  flatRateCost             Int                  @default(0)
+  freeShippingEnabled      Boolean              @default(false)
+  freeShippingMinimum      Int                  @default(0)
+  pickupEnabled            Boolean              @default(false)
+  /// Cash on delivery. Still the common way to pay in Indonesia, and the one
+  /// payment mode that must not expire on a timer — it settles when the parcel
+  /// arrives, not when the buyer clicks.
+  codEnabled               Boolean              @default(false)
+  codFee                   Int                  @default(0)
+  codMinimum               Int                  @default(0)
+  codMaximum               Int?
+  taxEnabled               Boolean              @default(false)
+  taxRateBps               Int                  @default(0)
+  pricesIncludeTax         Boolean              @default(true)
+  invoicePrefix            String               @default("INV")
+
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  manualPaymentMethods ManualPaymentMethod[]
+  pickupLocations      PickupLocation[]
+
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
+  midtransEnabled                  Boolean  @default(false)
+  midtransIsProduction             Boolean  @default(false)
+  midtransServerKey                String?
+  midtransClientKey                String?
+  taxLabel                         String   @default("PPN")
+  sellerName                       String?
+  sellerAddress                    String?
+  sellerTaxId                      String?
+  sellerPhone                      String?
+  sellerEmail                      String?
+  invoiceNotes                     String?
+  abandonedRecoveryEnabled         Boolean  @default(false)
+  abandonedRecoveryDelayMinutes    Int      @default(60)
+  abandonedRecoveryIntervalHours   Int      @default(24)
+  abandonedRecoveryMaxAttempts     Int      @default(3)
+  abandonedRecoveryEmailEnabled    Boolean  @default(true)
+  abandonedRecoveryWhatsappEnabled Boolean  @default(true)
+  abandonedRecoveryCouponEnabled   Boolean  @default(false)
+  abandonedRecoveryCouponPercent   Int      @default(10)
+  abandonedRecoveryCouponDays      Int      @default(3)
+}
+
+model LmsSetting {
+  id          String @id @default(cuid())
+  workspaceId String @unique
+
+  catalogEyebrow    String?
+  catalogHeading    String?
+  catalogSubheading String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StorefrontPageContent {
+  id          String @id @default(cuid())
+  workspaceId String
+  pageKey     String
+  content     Json   @default("{}")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, pageKey])
+  @@index([workspaceId])
+}
+
+model StorefrontSetting {
+  id          String @id @default(cuid())
+  workspaceId String @unique
+
+  navBlogLabel        String?
+  navCoursesLabel     String?
+  navProductsLabel    String?
+  navMembershipsLabel String?
+  navCartLabel        String?
+  navAccountLabel     String?
+  navLoginLabel       String?
+  navCustomLinks      Json    @default("[]")
+
+  footerEnabled   Boolean @default(false)
+  footerText      String?
+  footerCopyright String?
+
+  // Storefront social-proof popup: recent purchases shown to visitors.
+  salesNotificationEnabled Boolean @default(false)
+  salesNotificationText    String? @db.Text
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ManualPaymentMethod {
+  id            String                  @id @default(cuid())
+  workspaceId   String
+  settingId     String
+  type          ManualPaymentMethodType @default(BANK_TRANSFER)
+  name          String
+  accountName   String?
+  accountNumber String?
+  qrImageUrl    String?
+  instructions  String?                 @db.Text
+  isActive      Boolean                 @default(true)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  setting   EcommerceSetting @relation(fields: [settingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([settingId])
+}
+
+model PickupLocation {
+  id          String  @id @default(cuid())
+  workspaceId String
+  settingId   String
+  name        String
+  address     String  @db.Text
+  city        String?
+  province    String?
+  postalCode  String?
+  phone       String?
+  isDefault   Boolean @default(false)
+  isActive    Boolean @default(true)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  setting   EcommerceSetting @relation(fields: [settingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  stocks    LocationStock[]
+
+  @@index([workspaceId])
+  @@index([settingId])
+}
+
+model InboxConversation {
+  id                 String                  @id @default(cuid())
+  workspaceId        String
+  customerId         String?
+  channel            InboxChannel            @default(WHATSAPP)
+  status             InboxConversationStatus @default(OPEN)
+  contactName        String?
+  contactPhone       String
+  subject            String?
+  lastMessagePreview String?
+  lastMessageAt      DateTime?
+  unreadCount        Int                     @default(0)
+  assignedToId       String?
+  /// When the customer last wrote. WhatsApp's 24-hour service window is
+  /// measured from here, so a reply is only free-form while it is recent.
+  lastInboundAt      DateTime?
+  /// Last time an operator alert went out for this thread, to throttle them.
+  notifiedAt         DateTime?
+
+  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer   Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignedTo User?          @relation("InboxAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages   InboxMessage[]
+  notes      InboxNote[]
+  labels     InboxLabel[]   @relation("InboxConversationLabels")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, channel, contactPhone])
+  @@index([workspaceId, status, lastMessageAt])
+  @@index([workspaceId, assignedToId])
+  // The inbox list orders by lastMessageAt for the whole workspace; the index
+  // above starts with status, so it cannot serve that sort.
+  @@index([workspaceId, lastMessageAt])
+  @@index([customerId])
+}
+
+model InboxMessage {
+  id                String                @id @default(cuid())
+  workspaceId       String
+  conversationId    String
+  direction         InboxMessageDirection
+  status            InboxMessageStatus    @default(RECEIVED)
+  kind              InboxMessageKind      @default(TEXT)
+  /// Text, or the caption of an attachment. Never null, so the list preview
+  /// and search keep working for media the provider sent without words.
+  body              String                @db.Text
+  mediaUrl          String?
+  mediaMimeType     String?
+  mediaFilename     String?
+  provider          WhatsAppProvider?
+  providerMessageId String?
+  errorMessage      String?
+  sentAt            DateTime?
+  receivedAt        DateTime?
+  /// The operator who wrote an outbound message; null for automated sends.
+  authorId          String?
+
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation InboxConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author       User?             @relation("InboxMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A provider that retries its webhook must not create a second message.
+  // NULLs are distinct in Postgres, so outbound rows without an id are fine.
+  @@unique([workspaceId, providerMessageId])
+  @@index([workspaceId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([providerMessageId])
+}
+
+/// How much of a product sits at one location.
+///
+/// This records where stock is, not what may be sold: selling still draws on
+/// the product's own total. Splitting the sellable number across warehouses
+/// would mean every reservation, fulfilment and refund had to pick a location,
+/// and two numbers that can disagree are worse than one that cannot.
+model LocationStock {
+  id          String  @id @default(cuid())
+  workspaceId String
+  locationId  String
+  productId   String
+  variantId   String?
+  quantity    Int     @default(0)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  location  PickupLocation  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([locationId, productId, variantId])
+  @@index([workspaceId, productId])
+  @@index([locationId])
+}
+
+/// One product inside a bundle.
+model ProductBundleItem {
+  id          String  @id @default(cuid())
+  workspaceId String
+  bundleId    String
+  productId   String
+  variantId   String?
+  quantity    Int     @default(1)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bundle    Product         @relation("BundleContents", fields: [bundleId], references: [id], onDelete: Cascade)
+  product   Product         @relation("BundledIn", fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([bundleId, productId, variantId])
+  @@index([bundleId])
+  @@index([productId])
+}
+
+/// A shopper's cart, kept beyond their browser.
+///
+/// The cart lived only in a cookie, so it vanished when someone switched from
+/// their phone to a laptop, and a shopper who stopped at the cart page was
+/// invisible — abandonment only started once an order existed.
+model Cart {
+  id          String  @id @default(cuid())
+  workspaceId String
+  customerId  String?
+  /// First-party analytics id, so an anonymous cart can still be recognised.
+  visitorId   String?
+  couponCode  String?
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, customerId])
+  @@index([workspaceId, updatedAt])
+  @@index([visitorId])
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  cartId    String
+  productId String
+  variantId String?
+  quantity  Int     @default(1)
+
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId, variantId])
+  @@index([cartId])
+}
+
+/// Someone waiting for a sold-out product to come back.
+///
+/// A sold-out page was a dead end: the shopper left and nothing brought them
+/// back when stock arrived.
+model StockNotification {
+  id          String    @id @default(cuid())
+  workspaceId String
+  productId   String
+  variantId   String?
+  /// `productId:variantId`, so the unique key works for a product with no
+  /// variant too — Postgres treats NULLs as distinct, which would let the same
+  /// person sign up repeatedly.
+  targetKey   String
+  email       String
+  notifiedAt  DateTime?
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([workspaceId, targetKey, email])
+  @@index([workspaceId, notifiedAt])
+  @@index([productId])
+}
+
+/// A shipping address a customer can reuse.
+///
+/// Addresses were only ever snapshotted onto an order, so a repeat buyer typed
+/// their province, city, postcode and street again at every checkout.
+model CustomerAddress {
+  id             String  @id @default(cuid())
+  workspaceId    String
+  customerId     String
+  label          String?
+  recipientName  String
+  recipientPhone String
+  provinceId     String?
+  provinceName   String?
+  cityId         String?
+  cityName       String?
+  postalCode     String?
+  address        String  @db.Text
+  isDefault      Boolean @default(false)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, isDefault])
+  @@index([workspaceId])
+}
+
+/// An internal note on a conversation: visible to the team, never sent.
+model InboxNote {
+  id             String  @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  authorId       String?
+  body           String  @db.Text
+
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation InboxConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author       User?             @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([workspaceId])
+}
+
+model InboxLabel {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String @default("#71717a")
+
+  workspace     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations InboxConversation[] @relation("InboxConversationLabels")
+
+  createdAt DateTime @default(now())
+
+  @@unique([workspaceId, name])
+}
+
+/// A canned reply an operator inserts by shortcut instead of retyping it.
+model InboxQuickReply {
+  id          String @id @default(cuid())
+  workspaceId String
+  shortcut    String
+  body        String @db.Text
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, shortcut])
+}
+
+model StoreNotification {
+  id            String                   @id @default(cuid())
+  workspaceId   String
+  customerId    String?
+  orderId       String?
+  channel       StoreNotificationChannel
+  event         StoreNotificationEvent
+  status        StoreNotificationStatus  @default(QUEUED)
+  recipient     String
+  subject       String?
+  body          String                   @db.Text
+  errorMessage  String?
+  sentAt        DateTime?
+  attempts      Int                      @default(0)
+  lastAttemptAt DateTime?
+  nextAttemptAt DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  order     Order?    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  clearedAt      DateTime?
+  inboxMessageId String?
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status])
+  @@index([status, nextAttemptAt])
+  @@index([orderId])
+  @@index([customerId])
+  @@index([inboxMessageId])
+  @@index([workspaceId, clearedAt, createdAt])
+}
+
+model ScheduledJob {
+  id          String             @id @default(cuid())
+  workspaceId String?
+  kind        ScheduledJobKind
+  status      ScheduledJobStatus @default(PENDING)
+  runAt       DateTime           @default(now())
+  payload     Json               @default("{}")
+  dedupeKey   String?
+  attempts    Int                @default(0)
+  maxAttempts Int                @default(3)
+  lastError   String?            @db.Text
+  lockedAt    DateTime?
+  lockedBy    String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, runAt])
+  @@index([dedupeKey, status])
+  @@index([workspaceId, kind, status])
+}
+
+/// Outbound server-side ad events (Meta Conversions API, TikTok Events API),
+/// queued and flushed in batches by the META_CAPI_FLUSH job. The table and job
+/// names predate TikTok support; `provider` says which platform a row is for.
+/// A partial unique index (see migration 20260913120000_tiktok_events) stops
+/// the same event being queued twice while it is pending or sent.
+model MetaCapiEvent {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  /// "META" | "TIKTOK"
+  provider      String    @default("META")
+  /// Which pixel the row is for: "" is the workspace's primary pixel in
+  /// IntegrationSetting, anything else an AdPixel.pixelId.
+  target        String    @default("")
+  eventName     String?
+  eventId       String?
+  payload       Json
+  sentAt        DateTime?
+  failedAt      DateTime?
+  nextAttemptAt DateTime?
+  attempts      Int       @default(0)
+  lastError     String?   @db.Text
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, sentAt, createdAt])
+  @@index([provider, workspaceId, sentAt, createdAt])
+  @@index([workspaceId, failedAt, createdAt])
+  @@index([workspaceId, nextAttemptAt, createdAt])
+  @@index([workspaceId, eventName, eventId])
+  @@index([sentAt])
+  @@index([failedAt])
+  @@index([nextAttemptAt])
+}
+
+/// An extra Meta or TikTok pixel. Every event the primary pixel gets goes to
+/// these too, in the browser and (with a token) through CAPI / Events API.
+model AdPixel {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  /// "META" | "TIKTOK"
+  provider      String
+  pixelId       String
+  label         String?
+  /// Server-side copy (Meta CAPI / TikTok Events API). Never sent to a browser.
+  serverEnabled Boolean  @default(false)
+  accessToken   String?  @db.Text
+  testEventCode String?
+  isActive      Boolean  @default(true)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, provider, pixelId])
+  @@index([workspaceId, provider, isActive])
+}
+
+model MetaCapiDailyStat {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  /// "META" | "TIKTOK"
+  provider      String    @default("META")
+  day           DateTime
+  sent          Int       @default(0)
+  failed        Int       @default(0)
+  staleDropped  Int       @default(0)
+  tokenErrors   Int       @default(0)
+  lastError     String?   @db.Text
+  lastFailureAt DateTime?
+  /// When the owner was told this provider's token was rejected, so they are told once a day.
+  alertedAt     DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, provider, day])
+  @@index([workspaceId, day])
+}
+
+model FollowUpTask {
+  id          String           @id @default(cuid())
+  workspaceId String
+  customerId  String?
+  orderId     String?
+  title       String
+  note        String?
+  channel     FollowUpChannel  @default(EMAIL)
+  priority    FollowUpPriority @default(MEDIUM)
+  status      FollowUpStatus   @default(OPEN)
+  dueAt       DateTime?
+  completedAt DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  order     Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, status, dueAt])
+  @@index([customerId])
+  @@index([orderId])
+}
+
+model OrderItem {
+  id              String  @id @default(cuid())
+  orderId         String
+  productId       String?
+  variantId       String?
+  nameSnapshot    String
+  skuSnapshot     String?
+  variantSnapshot Json?
+  unitPrice       Int
+  quantity        Int
+
+  order               Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product             Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant             ProductVariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  refundItems         OrderRefundItem[]
+  review              ProductReview?
+  variantNameSnapshot String?
+
+  @@index([orderId])
+  @@index([variantId])
+}
+
+/// Superseded by OrderRefund, but the table still exists in production from
+/// the earlier lineage. Declared so schema reconciliation never drops it.
+model Refund {
+  id          String  @id @default(cuid())
+  workspaceId String
+  orderId     String
+  amount      Int
+  reason      String?
+  /// Whether stock was returned — a per-refund decision the operator makes.
+  restocked   Boolean @default(false)
+  createdById String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([orderId])
+}
+
+model OrderRefund {
+  id                  String       @id @default(cuid())
+  workspaceId         String
+  orderId             String
+  customerId          String?
+  actorId             String?
+  type                RefundType   @default(REFUND)
+  status              RefundStatus @default(REQUESTED)
+  amount              Int          @default(0)
+  reason              String?      @db.Text
+  note                String?      @db.Text
+  provider            String       @default("manual")
+  providerRefundKey   String?      @unique
+  providerReference   String?
+  providerStatus      String?
+  providerResponse    Json?
+  providerRequestedAt DateTime?
+  returnToStock       Boolean      @default(false)
+  restockedAt         DateTime?
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  refundedAt          DateTime?
+  cancelledAt         DateTime?
+
+  workspace             Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order                 Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer              Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items                 OrderRefundItem[]
+  evidence              OrderRefundEvidence[]
+  commissionAdjustments CommissionAdjustment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status])
+  @@index([workspaceId, provider])
+  @@index([orderId])
+  @@index([customerId])
+}
+
+/// A file the customer attached to a refund/return request — a photo of the
+/// damage, or the receipt for shipping the item back. Stored alongside every
+/// other upload in /public/uploads; this row is what ties it to the refund.
+model OrderRefundEvidence {
+  id       String @id @default(cuid())
+  refundId String
+  url      String
+  name     String
+  mimeType String
+  size     Int    @default(0)
+
+  refund OrderRefund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([refundId])
+}
+
+model OrderRefundItem {
+  id              String  @id @default(cuid())
+  refundId        String
+  orderItemId     String
+  productId       String?
+  quantity        Int     @default(0)
+  restockQuantity Int     @default(0)
+
+  refund    OrderRefund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  orderItem OrderItem   @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  product   Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([refundId, orderItemId])
+  @@index([orderItemId])
+  @@index([productId])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  workspaceId String
+  kind        PaymentKind
+  status      PaymentStatus @default(PENDING)
+  provider    String        @default("midtrans")
+  amount      Int
+  description String?
+
+  // Midtrans references
+  midtransOrderId           String                   @unique
+  snapToken                 String?
+  snapRedirectUrl           String?
+  transactionId             String?
+  transactionStatus         String?
+  paymentType               String?
+  fraudStatus               String?
+  rawNotification           Json?
+  paidAt                    DateTime?
+  expiresAt                 DateTime?
+  /// When the buyer was nudged that their payment window is closing. Set once,
+  /// so a sweep that runs every few minutes does not send a reminder each time.
+  remindedAt                DateTime?
+  providerCancelStatus      String?
+  providerCancelReference   String?
+  providerCancelResponse    Json?
+  providerCancelRequestedAt DateTime?
+  manualProofUrl            String?
+  manualProofNote           String?                  @db.Text
+  manualProofStatus         ManualPaymentProofStatus @default(NOT_SUBMITTED)
+  manualProofSubmittedAt    DateTime?
+  manualProofReviewedAt     DateTime?
+  manualProofReviewedById   String?
+  /// Browser context at checkout (IP, user agent, pixel cookies, ad click ids).
+  /// The purchase is confirmed later by a webhook that has none of these, and
+  /// ad platforms match — and Meta requires a user agent for — website events.
+  adContext                 Json?
+  /// Validated affiliate attribution captured at checkout. It is validated
+  /// again during fulfilment before a commission is created.
+  referralAffiliateId       String?
+
+  // Exactly one of these is set, per `kind`.
+  orderId              String? @unique
+  enrollmentId         String? @unique
+  customerMembershipId String?
+  membershipRenewal    Boolean @default(false)
+
+  workspace            Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order                Order?                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  enrollment           Enrollment?                  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  customerMembership   CustomerMembership?          @relation(fields: [customerMembershipId], references: [id], onDelete: SetNull)
+  membershipGrant      MembershipGrant?
+  webhookEvents        PaymentWebhookEvent[]
+  reconciliationEvents PaymentReconciliationEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, createdAt])
+  @@index([status, expiresAt])
+  // Payment audit filters a workspace's failed provider cancellations.
+  @@index([workspaceId, providerCancelStatus])
+  @@index([status, expiresAt, remindedAt])
+  @@index([customerMembershipId, createdAt])
+  @@index([workspaceId, referralAffiliateId])
+}
+
+model ProductReview {
+  id           String              @id @default(cuid())
+  workspaceId  String
+  productId    String
+  customerId   String?
+  orderItemId  String?             @unique
+  status       ProductReviewStatus @default(PENDING)
+  rating       Int
+  title        String?
+  body         String?             @db.Text
+  customerName String
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer  Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, status, createdAt])
+  @@index([productId, status, createdAt])
+  @@index([customerId])
+}
+
+model WishlistItem {
+  id          String @id @default(cuid())
+  workspaceId String
+  customerId  String
+  productId   String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([customerId, productId])
+  @@index([workspaceId, createdAt])
+  @@index([productId])
+}
+
+model PaymentWebhookEvent {
+  id                String               @id @default(cuid())
+  workspaceId       String?
+  paymentId         String?
+  provider          String               @default("midtrans")
+  result            PaymentWebhookResult
+  signatureValid    Boolean?
+  midtransOrderId   String?
+  mappedStatus      PaymentStatus?
+  transactionStatus String?
+  fraudStatus       String?
+  transactionId     String?
+  paymentType       String?
+  changedPayment    Boolean?
+  error             String?              @db.Text
+  payload           Json?
+  receivedAt        DateTime             @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  payment   Payment?   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, receivedAt])
+  @@index([paymentId, receivedAt])
+  @@index([provider, result, receivedAt])
+  @@index([midtransOrderId, receivedAt])
+}
+
+model PaymentReconciliationEvent {
+  id                String                      @id @default(cuid())
+  workspaceId       String?
+  paymentId         String?
+  provider          String                      @default("midtrans")
+  result            PaymentReconciliationResult
+  midtransOrderId   String?
+  previousStatus    PaymentStatus?
+  mappedStatus      PaymentStatus?
+  transactionStatus String?
+  fraudStatus       String?
+  transactionId     String?
+  paymentType       String?
+  changedPayment    Boolean?
+  error             String?                     @db.Text
+  payload           Json?
+  checkedAt         DateTime                    @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  payment   Payment?   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, checkedAt])
+  @@index([paymentId, checkedAt])
+  @@index([provider, result, checkedAt])
+  @@index([midtransOrderId, checkedAt])
+}
+
+// ============================================================
+// Part 6 — Courses / LMS
+// ============================================================
+
+model Course {
+  id                 String           @id @default(cuid())
+  workspaceId        String
+  imageId            String?
+  title              String
+  slug               String
+  summary            String?
+  description        String?          @db.Text
+  status             CourseStatus     @default(DRAFT)
+  isFree             Boolean          @default(true)
+  price              Int              @default(0)
+  requiredLevel      MembershipLevel  @default(FREE)
+  publishedAt        DateTime?
+  categoryId         String?
+  instructorName     String?
+  instructorBio      String?          @db.Text
+  difficulty         CourseDifficulty @default(BEGINNER)
+  durationMinutes    Int              @default(0)
+  accessDays         Int              @default(0)
+  enrollmentLimit    Int?
+  sequentialProgress Boolean          @default(false)
+  certificateEnabled Boolean          @default(false)
+  featured           Boolean          @default(false)
+  tags               String[]         @default([])
+  seoTitle           String?
+  metaDescription    String?
+
+  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  image         UploadFile?          @relation("CourseImage", fields: [imageId], references: [id], onDelete: SetNull)
+  category      CourseCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  modules       CourseModule[]
+  enrollments   Enrollment[]
+  cohorts       CourseCohort[]
+  assets        CourseAsset[]
+  reviews       CourseReview[]
+  announcements CourseAnnouncement[]
+  liveSessions  CourseLiveSession[]
+  revisions     CourseRevision[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  // Public catalog lists published courses for a workspace.
+  @@index([workspaceId, status])
+  @@index([workspaceId, categoryId, status])
+  @@index([workspaceId, featured, status])
+  @@index([productId])
+}
+
+model CourseCategory {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courses   Course[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+model CourseModule {
+  id       String @id @default(cuid())
+  courseId String
+  title    String
+  order    Int
+
+  course  Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons CourseLesson[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
+}
+
+model CourseLesson {
+  id                   String     @id @default(cuid())
+  moduleId             String
+  title                String
+  type                 LessonType @default(TEXT)
+  order                Int
+  content              Json
+  isPreview            Boolean    @default(false)
+  dripDays             Int?
+  durationMinutes      Int        @default(0)
+  transcript           String?    @db.Text
+  assetId              String?
+  attachmentLabel      String?
+  prerequisiteLessonId String?
+
+  module                CourseModule       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress              LessonProgress[]
+  asset                 CourseAsset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  prerequisite          CourseLesson?      @relation("LessonPrerequisite", fields: [prerequisiteLessonId], references: [id], onDelete: SetNull)
+  dependents            CourseLesson[]     @relation("LessonPrerequisite")
+  lastViewedEnrollments Enrollment[]       @relation("EnrollmentLastLesson")
+  quiz                  CourseQuiz?
+  assignment            CourseAssignment?
+  notes                 CourseNote[]
+  bookmarks             LessonBookmark[]
+  discussions           CourseDiscussion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([moduleId])
+  @@index([assetId])
+  @@index([prerequisiteLessonId])
+}
+
+model CourseAsset {
+  id         String          @id @default(cuid())
+  courseId   String
+  name       String
+  storageKey String          @unique
+  mimeType   String
+  size       Int
+  kind       CourseAssetKind
+
+  course  Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons CourseLesson[]
+
+  createdAt DateTime @default(now())
+
+  @@index([courseId, kind])
+}
+
+model CourseCohort {
+  id       String    @id @default(cuid())
+  courseId String
+  name     String
+  startsAt DateTime?
+  endsAt   DateTime?
+  capacity Int?
+  isActive Boolean   @default(true)
+
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId, isActive])
+}
+
+model Enrollment {
+  id                String           @id @default(cuid())
+  workspaceId       String
+  courseId          String
+  customerId        String
+  status            EnrollmentStatus @default(ACTIVE)
+  enrolledAt        DateTime         @default(now())
+  completedAt       DateTime?
+  startedAt         DateTime?
+  lastAccessedAt    DateTime?
+  lastLessonId      String?
+  accessExpiresAt   DateTime?
+  progressPercent   Int              @default(0)
+  totalTimeSeconds  Int              @default(0)
+  finalScore        Int?
+  checkoutRequestId String?          @unique
+  couponCode        String?
+  subtotal          Int              @default(0)
+  discount          Int              @default(0)
+  total             Int              @default(0)
+  cohortId          String?
+
+  workspace             Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  course                Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  customer              Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  progress              LessonProgress[]
+  payment               Payment?
+  lastLesson            CourseLesson?          @relation("EnrollmentLastLesson", fields: [lastLessonId], references: [id], onDelete: SetNull)
+  cohort                CourseCohort?          @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  quizAttempts          QuizAttempt[]
+  assignmentSubmissions AssignmentSubmission[]
+  certificate           CourseCertificate?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([courseId, customerId])
+  @@index([workspaceId])
+  @@index([courseId, status])
+  @@index([customerId, status])
+  @@index([cohortId])
+}
+
+model LessonProgress {
+  id               String    @id @default(cuid())
+  enrollmentId     String
+  lessonId         String
+  completedAt      DateTime?
+  startedAt        DateTime?
+  lastViewedAt     DateTime?
+  timeSpentSeconds Int       @default(0)
+  progressPercent  Int       @default(0)
+
+  enrollment Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson     CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([enrollmentId, lessonId])
+  @@index([enrollmentId])
+}
+
+model CourseQuiz {
+  id               String  @id @default(cuid())
+  lessonId         String  @unique
+  title            String
+  description      String? @db.Text
+  passScore        Int     @default(70)
+  maxAttempts      Int     @default(0)
+  shuffleQuestions Boolean @default(false)
+
+  lesson    CourseLesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model QuizQuestion {
+  id            String           @id @default(cuid())
+  quizId        String
+  prompt        String           @db.Text
+  type          QuizQuestionType @default(SINGLE_CHOICE)
+  options       Json             @default("[]")
+  correctAnswer Json
+  explanation   String?          @db.Text
+  points        Int              @default(1)
+  order         Int
+
+  quiz CourseQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([quizId, order])
+}
+
+model QuizAttempt {
+  id           String   @id @default(cuid())
+  quizId       String
+  enrollmentId String
+  customerId   String
+  score        Int
+  passed       Boolean
+  answers      Json
+  startedAt    DateTime @default(now())
+  submittedAt  DateTime @default(now())
+
+  quiz       CourseQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([quizId, enrollmentId, submittedAt])
+  @@index([customerId])
+}
+
+model CourseAssignment {
+  id           String @id @default(cuid())
+  lessonId     String @unique
+  title        String
+  instructions String @db.Text
+  maxScore     Int    @default(100)
+
+  lesson      CourseLesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  submissions AssignmentSubmission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AssignmentSubmission {
+  id             String                     @id @default(cuid())
+  assignmentId   String
+  enrollmentId   String
+  customerId     String
+  status         AssignmentSubmissionStatus @default(DRAFT)
+  submissionText String?                    @db.Text
+  fileUrl        String?
+  score          Int?
+  feedback       String?                    @db.Text
+  submittedAt    DateTime?
+  gradedAt       DateTime?
+  gradedById     String?
+
+  assignment CourseAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  enrollment Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([assignmentId, enrollmentId])
+  @@index([customerId, status])
+}
+
+model CourseCertificate {
+  id               String    @id @default(cuid())
+  enrollmentId     String    @unique
+  verificationCode String    @unique
+  recipientName    String
+  courseTitle      String
+  issuedAt         DateTime  @default(now())
+  revokedAt        DateTime?
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+}
+
+model CourseNote {
+  id         String @id @default(cuid())
+  lessonId   String
+  customerId String
+  body       String @db.Text
+
+  lesson   CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  customer Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lessonId, customerId])
+  @@index([customerId])
+}
+
+model LessonBookmark {
+  id         String @id @default(cuid())
+  lessonId   String
+  customerId String
+
+  lesson   CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  customer Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([lessonId, customerId])
+  @@index([customerId])
+}
+
+model CourseDiscussion {
+  id         String  @id @default(cuid())
+  lessonId   String
+  customerId String
+  parentId   String?
+  body       String  @db.Text
+  isHidden   Boolean @default(false)
+
+  lesson   CourseLesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  customer Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  parent   CourseDiscussion?  @relation("DiscussionReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  CourseDiscussion[] @relation("DiscussionReplies")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lessonId, createdAt])
+  @@index([customerId])
+}
+
+model CourseAnnouncement {
+  id          String    @id @default(cuid())
+  courseId    String
+  title       String
+  body        String    @db.Text
+  publishedAt DateTime?
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId, publishedAt])
+}
+
+model CourseLiveSession {
+  id              String   @id @default(cuid())
+  courseId        String
+  title           String
+  description     String?  @db.Text
+  startsAt        DateTime
+  durationMinutes Int      @default(60)
+  joinUrl         String
+  replayUrl       String?
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId, startsAt])
+}
+
+model CourseRevision {
+  id          String  @id @default(cuid())
+  courseId    String
+  version     Int
+  snapshot    Json
+  createdById String?
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([courseId, version])
+  @@index([courseId, createdAt])
+}
+
+model CourseReview {
+  id          String             @id @default(cuid())
+  workspaceId String
+  courseId    String
+  customerId  String
+  status      CourseReviewStatus @default(PENDING)
+  rating      Int
+  title       String?
+  body        String?            @db.Text
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  course    Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  customer  Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([courseId, customerId])
+  @@index([workspaceId, status, createdAt])
+  @@index([courseId, status])
+}
+
+// ============================================================
+// Part 7 — Blog CMS
+// ============================================================
+
+model BlogCategory {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts     BlogPost[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+model BlogTag {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts     BlogPost[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+model BlogPost {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  authorId         String?
+  categoryId       String?
+  imageId          String?
+  title            String
+  slug             String
+  excerpt          String?
+  body             String         @db.Text
+  status           BlogPostStatus @default(DRAFT)
+  seoTitle         String?
+  metaDescription  String?
+  canonicalUrl     String?
+  noindex          Boolean        @default(false)
+  imageAlt         String?
+  imageCaption     String?
+  publishedSlug    String?
+  publishedVersion Int?
+  scheduledVersion Int?
+  publishedAt      DateTime?
+  scheduledAt      DateTime?
+  archivedAt       DateTime?
+  featuredAt       DateTime?
+
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author      User?             @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  category    BlogCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  image       UploadFile?       @relation("BlogImage", fields: [imageId], references: [id], onDelete: SetNull)
+  tags        BlogTag[]
+  versions    BlogPostVersion[]
+  slugHistory BlogSlugHistory[]
+  events      BlogPostEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isPopular Boolean  @default(false)
+
+  @@unique([workspaceId, slug])
+  @@unique([workspaceId, publishedSlug])
+  @@index([workspaceId, status, publishedAt])
+  @@index([categoryId, status, publishedAt])
+  @@index([workspaceId, featuredAt])
+}
+
+model BlogPostVersion {
+  id              String  @id @default(cuid())
+  postId          String
+  version         Int
+  title           String
+  slug            String
+  excerpt         String?
+  body            String  @db.Text
+  seoTitle        String?
+  metaDescription String?
+  canonicalUrl    String?
+  noindex         Boolean @default(false)
+  imageUrl        String?
+  imageAlt        String?
+  imageCaption    String?
+  authorName      String?
+  categoryName    String?
+  categorySlug    String?
+  tags            Json    @default("[]")
+
+  post BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([postId, version])
+  @@index([postId, createdAt])
+}
+
+model BlogSlugHistory {
+  id          String @id @default(cuid())
+  workspaceId String
+  postId      String
+  slug        String
+
+  post BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([workspaceId, slug])
+  @@index([postId])
+}
+
+model BlogPostEvent {
+  id          String            @id @default(cuid())
+  workspaceId String
+  postId      String
+  type        BlogPostEventType
+  visitorId   String?
+  path        String?
+  referrer    String?
+  platform    String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  post      BlogPost  @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([postId, type, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+// ============================================================
+// Part 7 — Form builder
+// ============================================================
+
+model Form {
+  id               String     @id @default(cuid())
+  workspaceId      String
+  title            String
+  slug             String
+  description      String?
+  successMessage   String     @default("Thanks! We received your submission.")
+  submitLabel      String     @default("Submit")
+  // Kept for page-builder compatibility. `status` is the lifecycle source of
+  // truth and publication actions keep this value in sync.
+  isOpen           Boolean    @default(false)
+  status           FormStatus @default(DRAFT)
+  publishedSlug    String?
+  publishedVersion Int?
+  publishedAt      DateTime?
+  opensAt          DateTime?
+  closesAt         DateTime?
+  maxSubmissions   Int?
+  closedMessage    String     @default("This form is closed and no longer accepting submissions.")
+  multiStep        Boolean    @default(false)
+  notifyEmail      String?
+  webhookUrl       String?
+  redirectUrl      String?
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  fields      FormField[]
+  submissions FormSubmission[]
+  views       AnalyticsEvent[]
+  versions    FormVersion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@unique([workspaceId, publishedSlug])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+}
+
+model FormVersion {
+  id             String    @id @default(cuid())
+  formId         String
+  version        Int
+  title          String
+  slug           String
+  description    String?
+  successMessage String
+  submitLabel    String
+  multiStep      Boolean   @default(false)
+  notifyEmail    String?
+  webhookUrl     String?
+  redirectUrl    String?
+  opensAt        DateTime?
+  closesAt       DateTime?
+  maxSubmissions Int?
+  closedMessage  String
+  fields         Json
+
+  form        Form             @relation(fields: [formId], references: [id], onDelete: Cascade)
+  submissions FormSubmission[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([formId, version])
+  @@index([formId, createdAt])
+}
+
+model FormField {
+  id          String        @id @default(cuid())
+  formId      String
+  label       String
+  name        String
+  type        FormFieldType
+  required    Boolean       @default(false)
+  placeholder String?
+  helpText    String?
+  options     Json?
+  order       Int
+  pageStep    Int           @default(0)
+  minLength   Int?
+  maxLength   Int?
+  minValue    Float?
+  maxValue    Float?
+  pattern     String?
+  patternHint String?
+  acceptMime  String?
+  visibleIf   Json?
+
+  form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([formId])
+}
+
+model FormSubmission {
+  id            String               @id @default(cuid())
+  formId        String
+  formVersionId String?
+  workspaceId   String
+  // Idempotency key minted by the browser per fill. A resent request carries
+  // the same one, so the unique constraint collapses it into the original.
+  requestId     String?              @unique
+  data          Json
+  status        FormSubmissionStatus @default(NEW)
+  notes         String?
+  referrer      String?
+  ipAddress     String?
+  userAgent     String?
+
+  form        Form           @relation(fields: [formId], references: [id], onDelete: Cascade)
+  formVersion FormVersion?   @relation(fields: [formVersionId], references: [id], onDelete: SetNull)
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries  FormDelivery[]
+
+  createdAt DateTime @default(now())
+
+  @@index([formId])
+  @@index([formVersionId])
+  @@index([formId, status, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+model FormDelivery {
+  id            String             @id @default(cuid())
+  submissionId  String
+  kind          FormDeliveryKind
+  target        String
+  status        FormDeliveryStatus @default(PENDING)
+  attempts      Int                @default(0)
+  maxAttempts   Int                @default(5)
+  lastError     String?
+  lastTriedAt   DateTime?
+  // When the retry sweep may try again. Null means "not scheduled" — either
+  // it has never failed, or it has run out of attempts.
+  nextAttemptAt DateTime?
+
+  submission FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([submissionId])
+  @@index([status, lastTriedAt])
+  // The retry sweep's hot path: due rows, oldest first.
+  @@index([status, nextAttemptAt])
+}
+
+// ============================================================
+// Part 8 — Affiliate, coupon, membership
+// ============================================================
+
+model AffiliateProgram {
+  id                String                    @id @default(cuid())
+  workspaceId       String                    @unique
+  name              String                    @default("Affiliate Program")
+  description       String?
+  commissionPercent Int                       @default(20)
+  isOpen            Boolean                   @default(true)
+  approvalMode      AffiliateApprovalMode     @default(MANUAL)
+  attributionModel  AffiliateAttributionModel @default(LAST_CLICK)
+  attributionDays   Int                       @default(30)
+  holdDays          Int                       @default(14)
+  minimumPayout     Int                       @default(100000)
+  allowSelfReferral Boolean                   @default(false)
+  includeShipping   Boolean                   @default(false)
+  includeTax        Boolean                   @default(false)
+  includeFees       Boolean                   @default(false)
+  terms             String?                   @db.Text
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  affiliates Affiliate[]
+  creatives  AffiliateCreative[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Affiliate {
+  id                     String                 @id @default(cuid())
+  programId              String
+  workspaceId            String
+  customerId             String
+  referralCode           String                 @unique
+  status                 AffiliateStatus        @default(PENDING)
+  appliedAt              DateTime               @default(now())
+  approvedAt             DateTime?
+  suspendedAt            DateTime?
+  archivedAt             DateTime?
+  rejectionReason        String?                @db.Text
+  emailVerifiedAt        DateTime?
+  payoutMethod           AffiliatePayoutMethod?
+  payoutAccountLabel     String?
+  payoutDetailsEncrypted String?                @db.Text
+  termsAcceptedAt        DateTime?
+
+  program     AffiliateProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer    Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  referrals   Referral[]
+  commissions Commission[]
+  codeAliases AffiliateCodeAlias[]
+  payouts     AffiliatePayout[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([programId, customerId])
+  @@index([workspaceId])
+  @@index([workspaceId, status, createdAt])
+}
+
+model AffiliateCodeAlias {
+  id          String    @id @default(cuid())
+  affiliateId String
+  code        String    @unique
+  expiresAt   DateTime?
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([affiliateId, createdAt])
+}
+
+model AffiliateCreative {
+  id          String                @id @default(cuid())
+  workspaceId String
+  programId   String
+  title       String
+  type        AffiliateCreativeType @default(LINK)
+  content     String                @db.Text
+  targetUrl   String?
+  isActive    Boolean               @default(true)
+  sortOrder   Int                   @default(0)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  program   AffiliateProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, isActive, sortOrder])
+  @@index([programId, sortOrder])
+}
+
+model Referral {
+  id          String        @id @default(cuid())
+  affiliateId String
+  workspaceId String
+  orderId     String?
+  event       ReferralEvent
+  ipAddress   String?
+  userAgent   String?
+  clickId     String?
+  visitorHash String?
+  ipHash      String?
+  dedupeKey   String?       @unique
+  landingUrl  String?       @db.Text
+  referrer    String?       @db.Text
+  campaign    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  deviceType  String?
+  isBot       Boolean       @default(false)
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order     Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([orderId, event])
+  @@index([affiliateId, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+model Commission {
+  id             String               @id @default(cuid())
+  affiliateId    String
+  workspaceId    String
+  orderId        String?
+  amount         Int
+  originalAmount Int?
+  adjustedAmount Int                  @default(0)
+  percent        Int
+  status         CommissionStatus     @default(PENDING)
+  paidAt         DateTime?
+  reversedAt     DateTime?
+  reversalReason String?              @db.Text
+  sourceType     CommissionSourceType @default(ORDER)
+  sourceKey      String?              @unique
+  sourceLabel    String?
+  basisAmount    Int                  @default(0)
+  rateBps        Int                  @default(0)
+  currency       String               @default("IDR")
+  availableAt    DateTime?
+  approvedAt     DateTime?
+
+  affiliate   Affiliate              @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order       Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  adjustments CommissionAdjustment[]
+  payoutItem  AffiliatePayoutItem?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId])
+  @@index([affiliateId, createdAt])
+  @@index([workspaceId, status])
+  @@index([workspaceId, availableAt, status])
+}
+
+model CommissionAdjustment {
+  id                String                   @id @default(cuid())
+  workspaceId       String
+  commissionId      String
+  orderId           String?
+  refundId          String?
+  type              CommissionAdjustmentType
+  amount            Int
+  reason            String?                  @db.Text
+  metadata          Json                     @default("{}")
+  recoveredAmount   Int                      @default(0)
+  recoveredAt       DateTime?
+  recoveredPayoutId String?
+
+  workspace  Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  commission Commission   @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+  order      Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  refund     OrderRefund? @relation(fields: [refundId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([commissionId, refundId])
+  @@unique([commissionId, type, orderId])
+  @@index([workspaceId, createdAt])
+  @@index([orderId])
+  @@index([refundId])
+}
+
+model AffiliatePayout {
+  id                      String                 @id @default(cuid())
+  workspaceId             String
+  affiliateId             String
+  status                  AffiliatePayoutStatus  @default(DRAFT)
+  amount                  Int
+  grossAmount             Int                    @default(0)
+  adjustmentAmount        Int                    @default(0)
+  currency                String                 @default("IDR")
+  method                  AffiliatePayoutMethod?
+  accountLabel            String?
+  accountDetailsEncrypted String?                @db.Text
+  reference               String?
+  proofUrl                String?
+  note                    String?                @db.Text
+  idempotencyKey          String                 @unique
+  requestedAt             DateTime               @default(now())
+  processedAt             DateTime?
+  paidAt                  DateTime?
+  failureReason           String?                @db.Text
+  createdById             String?
+
+  workspace Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  affiliate Affiliate             @relation(fields: [affiliateId], references: [id], onDelete: Restrict)
+  items     AffiliatePayoutItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId, status, createdAt])
+  @@index([affiliateId, createdAt])
+}
+
+model AffiliatePayoutItem {
+  id           String @id @default(cuid())
+  payoutId     String
+  commissionId String @unique
+  amount       Int
+
+  payout     AffiliatePayout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  commission Commission      @relation(fields: [commissionId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([payoutId])
+}
+
+model Coupon {
+  id                 String               @id @default(cuid())
+  workspaceId        String
+  customerId         String?
+  code               String
+  type               CouponType
+  stackingMode       DiscountStackingMode @default(ADDITIVE)
+  value              Int // percentage 1–100 OR fixed rupiah amount
+  maxUses            Int? // null = unlimited
+  uses               Int                  @default(0)
+  expiresAt          DateTime?
+  startsAt           DateTime?
+  isActive           Boolean              @default(true)
+  productIds         String[]             @default([])
+  courseIds          String[]             @default([])
+  minimumPurchase    Int                  @default(0)
+  maxUsesPerCustomer Int?
+  firstOrderOnly     Boolean              @default(false)
+  freeShipping       Boolean              @default(false)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orders    Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
+  @@index([customerId])
+}
+
+model MembershipPlan {
+  id          String          @id @default(cuid())
+  workspaceId String
+  productId   String?
+  name        String
+  slug        String
+  description String?
+  level       MembershipLevel
+  price       Int             @default(0)
+  accessDays  Int             @default(0)
+  isActive    Boolean         @default(true)
+  benefits    Json            @default("[]")
+  recommended Boolean         @default(false)
+  ctaLabel    String?
+  sortOrder   Int             @default(0)
+  archivedAt  DateTime?
+
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product     Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  memberships CustomerMembership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([workspaceId, isActive, sortOrder])
+  @@index([productId])
+}
+
+model CustomerMembership {
+  id                 String           @id @default(cuid())
+  workspaceId        String
+  customerId         String
+  planId             String
+  status             MembershipStatus @default(ACTIVE)
+  startedAt          DateTime         @default(now())
+  expiresAt          DateTime?
+  cancelAtPeriodEnd  Boolean          @default(false)
+  cancelledAt        DateTime?
+  cancellationReason String?
+  lastRenewedAt      DateTime?
+  reminder14At       DateTime?
+  reminder7At        DateTime?
+  reminder1At        DateTime?
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer  Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  plan      MembershipPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  payments  Payment[]
+  grants    MembershipGrant[]
+  events    MembershipEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerId, planId])
+  @@index([workspaceId])
+  @@index([workspaceId, status, expiresAt])
+  @@index([customerId, status, expiresAt])
+}
+
+model MembershipGrant {
+  id           String                @id @default(cuid())
+  workspaceId  String
+  membershipId String
+  paymentId    String?               @unique
+  source       MembershipGrantSource
+  startsAt     DateTime
+  expiresAt    DateTime?
+  amount       Int                   @default(0)
+  metadata     Json?
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  membership CustomerMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  payment    Payment?           @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([membershipId, createdAt])
+}
+
+model MembershipEvent {
+  id           String              @id @default(cuid())
+  workspaceId  String
+  membershipId String
+  type         MembershipEventType
+  actorId      String?
+  fromPlanId   String?
+  toPlanId     String?
+  detail       Json?
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  membership CustomerMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, type, createdAt])
+  @@index([membershipId, createdAt])
+}
+
+// ============================================================
+// Part 9 — Integration settings (per workspace)
+// ============================================================
+
+model IntegrationSetting {
+  id                                String            @id @default(cuid())
+  workspaceId                       String            @unique
+  metaPixelId                       String?
+  metaCapiEnabled                   Boolean           @default(false)
+  metaCapiAccessToken               String?           @db.Text
+  metaCapiTestEventCode             String?
+  tiktokPixelId                     String?
+  tiktokEventsApiEnabled            Boolean           @default(false)
+  tiktokAccessToken                 String?           @db.Text
+  tiktokTestEventCode               String?
+  /// Hold Meta/TikTok/Google tracking until the visitor accepts cookies.
+  adConsentRequired                 Boolean           @default(false)
+  /// GA4 Measurement Protocol secret, for server-side purchase and refund.
+  googleAnalyticsApiSecret          String?           @db.Text
+  /// Google Ads conversion tag, e.g. AW-123456789, and its purchase label.
+  googleAdsConversionId             String?
+  googleAdsPurchaseLabel            String?
+  googleAnalyticsId                 String?
+  googleTagManagerId                String?
+  googleSearchConsoleVerification   String?
+  customHeadScript                  String?           @db.Text
+  mailketingEnabled                 Boolean           @default(false)
+  mailketingApiToken                String?           @db.Text
+  mailketingSenderName              String?
+  mailketingSenderEmail             String?
+  gmailOAuthEnabled                 Boolean           @default(false)
+  gmailClientId                     String?
+  gmailClientSecret                 String?           @db.Text
+  gmailRefreshToken                 String?           @db.Text
+  gmailSenderEmail                  String?
+  gmailSenderName                   String?
+  telegramEnabled                   Boolean           @default(false)
+  telegramBotToken                  String?           @db.Text
+  telegramChatId                    String?
+  telegramMessageThreadId           String?
+  whatsappProvider                  WhatsAppProvider?
+  whatsappApiKey                    String?
+  whatsappSenderNumber              String?
+  whatsappPhoneNumberId             String?
+  whatsappWebhookVerifyToken        String?
+  whatsappWebhookSecret             String?
+  whatsappIsActive                  Boolean           @default(false)
+  whatsappCloudEnabled              Boolean           @default(false)
+  whatsappDefaultTemplateLanguage   String?           @default("en_US")
+  whatsappGraphVersion              String?           @default("v25.0")
+  whatsappApiBaseUrl                String?
+  // Columns from the earlier WhatsApp Cloud / OneSender integration. Nothing
+  // reads them any more; they are declared so the schema matches every
+  // database that still carries them, and so reconciliation never proposes
+  // dropping them. All empty in production as of 12 Sep 2026.
+  whatsappAccessToken               String?
+  whatsappAppSecret                 String?
+  whatsappBusinessAccountId         String?
+  whatsappDefaultTemplateName       String?
+  whatsappDefaultTemplateParameters String?
+  oneSenderApiKey                   String?
+  oneSenderApiUrl                   String?
+  oneSenderPhoneNumber              String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  oneSenderEnabled Boolean  @default(false)
+}
+
+// ============================================================
+// Part 10 — SaaS plans + Super Admin
+// ============================================================
+
+model SaaSPlan {
+  id                    String       @id @default(cuid())
+  tier                  SaaSPlanTier @unique
+  name                  String
+  description           String?
+  monthlyPrice          Int          @default(0)
+  compareAtMonthlyPrice Int?
+  features              Json         @default("[]")
+  // Hard limits — null means unlimited.
+  workspaceLimit        Int?
+  memberLimit           Int?
+  pageLimit             Int?
+  productLimit          Int?
+  courseLimit           Int?
+  hasAffiliate          Boolean      @default(false)
+  hasMembership         Boolean      @default(false)
+  hasAdvancedAnalytics  Boolean      @default(false)
+  hasAiAssistant        Boolean      @default(false)
+  isPublic              Boolean      @default(true)
+  sortOrder             Int          @default(0)
+
+  subscriptions SaaSSubscription[]
+  invoices      SaaSInvoice[]
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  blogPostLimit        Int?
+  formLimit            Int?
+  customerLimit        Int?
+  monthlyOrderLimit    Int?
+  orderRetentionMonths Int?
+  customDomainEnabled  Boolean  @default(false)
+}
+
+model SaaSSubscription {
+  id               String                 @id @default(cuid())
+  userId           String                 @unique
+  planId           String
+  status           SaaSSubscriptionStatus @default(ACTIVE)
+  startedAt        DateTime               @default(now())
+  currentPeriodEnd DateTime?
+  cancelledAt      DateTime?
+
+  /// Pembatalan berlaku di akhir periode, bukan seketika: pelanggan sudah
+  /// membayar sampai `currentPeriodEnd` dan berhak memakainya sampai habis.
+  cancelAtPeriodEnd Boolean @default(false)
+
+  /// Masa tenggang setelah `currentPeriodEnd` lewat. Pembayaran QRIS
+  /// diverifikasi manual, jadi akses tidak boleh mati di detik yang sama
+  /// dengan jatuh tempo. Selama tenggang status jadi PAST_DUE tapi plan
+  /// berbayar masih berlaku.
+  graceUntil DateTime?
+  expiredAt  DateTime?
+
+  /// Pengingat perpanjangan terakhir yang sudah terkirim, dalam "sisa hari"
+  /// (7, 3, 1). 0 berarti belum ada. Direset setiap kali periode diperpanjang
+  /// supaya sweep tidak mengirim ulang pengingat periode sebelumnya.
+  lastReminderStage Int @default(0)
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SaaSPlan @relation(fields: [planId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId])
+  @@index([status, currentPeriodEnd])
+}
+
+/// Satu tagihan QRIS. Dibuat di server supaya nomor invoice, kode unik, dan
+/// nominal yang harus ditransfer benar-benar tercatat dan bisa dicocokkan
+/// admin — bukan angka yang dikarang ulang tiap kali dialog dibuka.
+model SaaSInvoice {
+  id     String            @id @default(cuid())
+  number String            @unique
+  userId String
+  planId String
+  tier   SaaSPlanTier
+  kind   SaaSInvoiceKind   @default(NEW)
+  status SaaSInvoiceStatus @default(AWAITING_PAYMENT)
+
+  /// Harga dibekukan saat invoice dibuat. Promo boleh berubah kapan saja
+  /// tanpa mengubah nominal tagihan yang sudah diberikan ke pelanggan.
+  listPrice      Int
+  promoPrice     Int
+  /// Sisa nilai plan lama saat upgrade di tengah periode.
+  proratedCredit Int @default(0)
+  uniqueCode     Int
+  totalAmount    Int
+  periodMonths   Int @default(1)
+
+  /// Berisi nominal total selama invoice masih terbuka, dikosongkan saat
+  /// selesai. Unique-nya menjamin satu nominal transfer hanya dimiliki satu
+  /// invoice aktif — itulah gunanya kode unik. Postgres menganggap NULL
+  /// berbeda satu sama lain, jadi invoice lama dengan nominal sama tetap boleh.
+  openAmountKey String? @unique
+
+  expiresAt   DateTime
+  paidAt      DateTime?
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  proofUrl         String?
+  proofNote        String?                  @db.Text
+  proofStatus      ManualPaymentProofStatus @default(NOT_SUBMITTED)
+  proofSubmittedAt DateTime?
+  reviewedAt       DateTime?
+  reviewedById     String?
+  reviewNote       String?                  @db.Text
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan       SaaSPlan @relation(fields: [planId], references: [id])
+  reviewedBy User?    @relation("SaaSInvoiceReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+  @@index([status, proofSubmittedAt])
+  @@index([planId])
+  @@index([reviewedById])
+}
+
+/// Konfigurasi pembayaran QRIS tingkat platform. Satu baris, id "default".
+/// Ada supaya QR dan nomor konfirmasi bisa dirotasi dari admin tanpa deploy.
+model SaaSBillingSetting {
+  id                 String  @id @default("default")
+  qrisImageUrl       String?
+  qrisMerchantName   String?
+  whatsappNumber     String?
+  paymentInstruction String? @db.Text
+  /// Umur invoice sebelum kadaluarsa dan kode uniknya dilepas kembali.
+  invoiceWindowHours Int     @default(24)
+  /// Tenggang setelah jatuh tempo sebelum plan turun ke Free.
+  graceDays          Int     @default(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Template situs yang bisa dipakai ulang di builder.
+///
+/// Dulu modelnya hanya metadata — nama, slug, thumbnail — tanpa satu pun
+/// kolom konten, jadi apa pun yang dibuat admin tidak pernah bisa muncul di
+/// builder, yang membaca daftar template dari array hardcode.
+model SiteTemplate {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String?
+  thumbnail   String?
+  isPublished Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  /// Blok template, bentuknya sama dengan PageRevision.blocks.
+  blocks       Json    @default("[]")
+  blockCount   Int     @default(0)
+  /// Design token yang ikut diterapkan bersama template, bila ada.
+  designTokens Json?
+  /// Pengelompokan di daftar template, mis. "Landing" atau "Toko".
+  category     String?
+
+  createdById String?
+  createdBy   User?   @relation("SiteTemplateAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isPublished, sortOrder])
+  @@index([createdById])
+}
+
+model AbuseReport {
+  id            String            @id @default(cuid())
+  workspaceId   String?
+  reporterEmail String?
+  reason        String            @db.Text
+  status        AbuseReportStatus @default(OPEN)
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+/// Server and client errors captured by lib/error-reporting.ts, deduplicated by
+/// fingerprint so a failure that repeats a thousand times is one row with a count.
+/// Platform-wide (no workspace FK): an error often happens before a workspace is known.
+model ErrorEvent {
+  id          String    @id @default(cuid())
+  fingerprint String    @unique
+  source      String
+  message     String
+  stack       String?
+  context     Json?
+  count       Int       @default(1)
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  @@index([resolvedAt, lastSeenAt])
+}
+
+/// One row per workspace per day, filled by the ANALYTICS_ROLLUP job.
+/// Charts read it instead of scanning raw events, and it keeps the history
+/// after raw AnalyticsEvent rows are pruned.
+model AnalyticsDailyStat {
+  id          String   @id @default(cuid())
+  workspaceId String
+  /// Midnight of the day, in the server's time zone.
+  day         DateTime
+  pageViews   Int      @default(0)
+  visitors    Int      @default(0)
+  viewContent Int      @default(0)
+  addToCart   Int      @default(0)
+  checkouts   Int      @default(0)
+  purchases   Int      @default(0)
+  /// Order value recorded on PURCHASE events, in whole currency units.
+  revenue     Int      @default(0)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, day])
+  @@index([workspaceId, day])
+}

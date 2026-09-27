@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "BlockType" ADD VALUE 'IMAGE_SLIDER' BEFORE 'VIDEO';
