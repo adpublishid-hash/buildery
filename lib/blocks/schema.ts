@@ -112,9 +112,25 @@ export const blockStyleSchema = z.object({
   mobile: blockDeviceStyleSchema,
 });
 
+/**
+ * Per-device overrides of a block's layout fields (see
+ * lib/blocks/responsive-content.ts for which fields a type allows). Stored
+ * loosely here and validated field by field when resolved, so a value a
+ * later version no longer accepts is ignored instead of breaking the block.
+ */
+const contentOverrideSchema = z
+  .record(z.string().max(64), z.union([z.string().max(64), z.number(), z.boolean()]))
+  .default({});
+
+export const blockResponsiveSchema = z.object({
+  tablet: contentOverrideSchema,
+  mobile: contentOverrideSchema,
+});
+
 const withStyle = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
   schema.extend({
     style: blockStyleSchema.default({}),
+    responsive: blockResponsiveSchema.default({}),
     // Named `motion` rather than `animation` because BUTTON blocks already
     // carry their own per-button `animation` field.
     motion: blockAnimationSchema.default({}),

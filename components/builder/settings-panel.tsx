@@ -21,6 +21,11 @@ import {
 } from "@/lib/blocks/animation";
 import { BLOCK_REGISTRY } from "@/lib/blocks/registry";
 import { EMPTY_BLOCK_STYLE, STYLE_PRESETS } from "@/lib/blocks/style";
+import {
+  applyContentEdit,
+  resolveBlockDataForDevice,
+} from "@/lib/blocks/responsive-content";
+import { DeviceContentPanel } from "./device-content-panel";
 import { readStyleClipboard, writeStyleClipboard } from "@/lib/builder/clipboard";
 import { cn } from "@/lib/utils";
 import { ChoiceField, ToggleField } from "./fields";
@@ -164,16 +169,24 @@ export function SettingsPanel({
       <div className="flex-1 overflow-y-auto p-4">
         {activeTab === "content" ? (
           <div className="space-y-4">
-            {previewDevice !== "desktop" ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-                Konten (teks, gambar, tautan) sama untuk semua device. Tampilan
-                bisa berbeda per device tanpa duplikat block: buka tab Style
-                saat mode {previewDevice} aktif.
-              </div>
-            ) : null}
-            <BlockForm
+            <DeviceContentPanel
               block={block}
+              device={previewDevice}
+              onDeviceChange={onPreviewDeviceChange}
               onChange={onChange}
+            />
+            <BlockForm
+              // The form edits what the previewed device shows; layout
+              // fields changed on tablet/mobile become overrides for it.
+              block={
+                {
+                  ...block,
+                  data: resolveBlockDataForDevice(block.type, block.data, previewDevice),
+                } as Block
+              }
+              onChange={(next) =>
+                onChange(applyContentEdit(block.type, block.data, previewDevice, next))
+              }
               formOptions={formOptions}
             />
           </div>

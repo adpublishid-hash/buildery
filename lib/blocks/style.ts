@@ -464,7 +464,8 @@ function rulesFor(scope: string, declarations: StyleDeclarations) {
     if (body) rules.push(`${target}{${body}}`);
   };
   add(selector, declarationBlock(declarations.self));
-  add(`${selector}>*`, declarationBlock(declarations.child));
+  // A block rendered in per-device versions wraps each in a .bd-variant.
+  add(`${selector}>:not(.bd-variant),${selector}>.bd-variant>*`, declarationBlock(declarations.child));
   add(`${selector} :where(h1,h2,h3,h4)`, declarationBlock(declarations.headings, true));
   add(`${selector} :where(p,li,.bd-rich-text)`, declarationBlock(declarations.text, true));
   return rules.join("");

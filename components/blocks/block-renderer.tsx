@@ -1,4 +1,5 @@
 import type { Block } from "@/lib/blocks/schema";
+import { contentVariants, resolveBlockDataForDevice } from "@/lib/blocks/responsive-content";
 import { blockWrapperProps } from "@/lib/blocks/style";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +57,9 @@ export function BlockRenderer({
   const styleData = block.data.style;
   if (!editor && styleData?.hidden) return null;
 
-  const rendered = renderBlock(block);
+  const rendered = editor
+    ? renderBlock(withData(block, resolveBlockDataForDevice(block.type, block.data, previewDevice ?? "desktop")))
+    : renderPublicVariants(block);
   // The builder canvas is narrower than the browser, so it shows the
   // previewed device's style directly instead of relying on media queries.
   const wrapper = blockWrapperProps(
@@ -89,6 +92,39 @@ export function BlockRenderer({
       </div>
     </>
   );
+}
+
+function withData(block: Block, data: Block["data"]) {
+  return (data === block.data ? block : { ...block, data }) as Block;
+}
+
+/**
+ * A block whose layout differs per device (Konten tab, tablet/mobile mode) is
+ * rendered once per distinct version; CSS shows the one for the current
+ * screen width. `display: contents` keeps each version's root the effective
+ * child of the wrapper, so spacing and width rules still reach it.
+ */
+// Spelled out so Tailwind finds them; the rules live in globals.css.
+const VARIANT_CLASS = {
+  desktop: "bd-variant-on-desktop",
+  tablet: "bd-variant-on-tablet",
+  mobile: "bd-variant-on-mobile",
+} as const;
+
+function renderPublicVariants(block: Block) {
+  const variants = contentVariants(block.type, block.data);
+  if (variants.length === 1) return renderBlock(block);
+  return variants.map((variant) => (
+    <div
+      key={variant.devices.join("-")}
+      className={cn(
+        "bd-variant",
+        variant.devices.map((device) => VARIANT_CLASS[device])
+      )}
+    >
+      {renderBlock(withData(block, variant.data))}
+    </div>
+  ));
 }
 
 function renderBlock(block: Block) {

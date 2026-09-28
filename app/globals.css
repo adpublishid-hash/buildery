@@ -144,8 +144,34 @@
      (top/bottom/left/right). This targets each block's content root only —
      inner element padding (buttons, cards, icons) is untouched. Users can add
      more spacing per block via the Style tab (which pads the wrapper above). */
-  .bd-block-style > * {
+  .bd-block-style > :not(.bd-variant),
+  .bd-block-style > .bd-variant > * {
     padding: 5px !important;
+  }
+
+  /* Per-device versions of one block (layout set per device in the Konten
+     tab). Only the version for the current width is shown; `contents` keeps
+     its block root the effective child of the wrapper. */
+  .bd-variant {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .bd-variant-on-desktop {
+      display: contents;
+    }
+  }
+
+  @media (min-width: 640px) and (max-width: 1023px) {
+    .bd-variant-on-tablet {
+      display: contents;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .bd-variant-on-mobile {
+      display: contents;
+    }
   }
 
   /* Style tab options that only apply when set are emitted per block, per
