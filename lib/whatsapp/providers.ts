@@ -15,6 +15,8 @@ export type WhatsAppConfig = {
   /** Required by the self-hosted/gateway providers; unused by WABA. */
   apiBaseUrl: string;
   graphVersion: string;
+  /** Kirimi account code (`user_code`); unused by the other providers. */
+  userCode?: string;
 };
 
 export type WhatsAppRequest = {
@@ -53,6 +55,17 @@ const WABA_DEFAULT_BASE = "https://graph.facebook.com";
 const ONESENDER_PATH = "/api/v1/messages";
 const STARSENDER_DEFAULT_BASE = "https://api.starsender.online";
 const STARSENDER_PATH = "/api/send";
+// WAHA (devlikeapro) is self-hosted; one server can run several sessions.
+const WAHA_PATH = "/api/sendText";
+const WAHA_DEFAULT_SESSION = "default";
+// Woowa's hosted API (notifapi.com); older installs run on a dedicated IP.
+const WOOWA_DEFAULT_BASE = "https://notifapi.com";
+const WOOWA_PATH = "/api/send_message";
+// Kirimi (kirimi.id): credentials travel in the JSON body, not headers.
+const KIRIMI_DEFAULT_BASE = "https://api.kirimi.id";
+const KIRIMI_PATH = "/v1/send-message";
+/** Kirimi rejects messages longer than this. */
+export const KIRIMI_MAX_TEXT_LENGTH = 1200;
 
 /**
  * Builds the provider-specific HTTP request for one plain-text message.
@@ -118,6 +131,59 @@ export function buildSendRequest(
     };
   }
 
+  if (config.provider === "WAHA") {
+    if (!config.apiBaseUrl) {
+      throw new WhatsAppConfigError(
+        "URL server WAHA belum diisi di Settings > Integrasi."
+      );
+    }
+    return {
+      url: joinEndpoint(config.apiBaseUrl, WAHA_PATH),
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        "x-api-key": config.apiKey,
+      },
+      body: JSON.stringify({
+        session: config.phoneNumberId || WAHA_DEFAULT_SESSION,
+        chatId: `${to}@c.us`,
+        text,
+      }),
+    };
+  }
+
+  if (config.provider === "WOOWA") {
+    return {
+      url: joinEndpoint(config.apiBaseUrl || WOOWA_DEFAULT_BASE, WOOWA_PATH),
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ phone_no: to, key: config.apiKey, message: text }),
+    };
+  }
+
+  if (config.provider === "KIRIMI") {
+    if (!config.userCode) {
+      throw new WhatsAppConfigError(
+        "User Code Kirimi belum diisi di Settings > Integrasi."
+      );
+    }
+    if (!config.phoneNumberId) {
+      throw new WhatsAppConfigError(
+        "Device ID Kirimi belum diisi di Settings > Integrasi."
+      );
+    }
+    return {
+      url: joinEndpoint(config.apiBaseUrl || KIRIMI_DEFAULT_BASE, KIRIMI_PATH),
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        user_code: config.userCode,
+        device_id: config.phoneNumberId,
+        receiver: to,
+        message: text.slice(0, KIRIMI_MAX_TEXT_LENGTH),
+        secret: config.apiKey,
+      }),
+    };
+  }
+
   // StarSender is a hosted service on one fixed endpoint, and its API key
   // goes in Authorization raw — no Bearer prefix.
   return {
@@ -172,6 +238,14 @@ export function parseSendResponse(
     return { ok: true, providerMessageId: id };
   }
 
+  if (provider === "WOOWA" && payload === null) {
+    // Woowa answers in plain text: "Success", or a reason such as
+    // "phone_offline" / "invalid key".
+    const reply = rawBody.trim();
+    if (reply.toLowerCase() === "success") return { ok: true, providerMessageId: null };
+    return { ok: false, error: `HTTP ${status}: ${reply.slice(0, 300) || "provider tidak memberi keterangan"}` };
+  }
+
   const record = asRecord(payload);
   // Gateways commonly signal failure in the body of a 200 response.
   const explicitFailure =
@@ -198,6 +272,9 @@ function readGatewayMessageId(record: Record<string, unknown>): string | null {
     const value = record[key];
     if (typeof value === "string" && value) return value;
     if (typeof value === "number") return String(value);
+    // WAHA (WEBJS engine) returns the id as {"_serialized": "true_62..@c.us_ABC"}.
+    const serialized = asRecord(value)._serialized;
+    if (typeof serialized === "string" && serialized) return serialized;
   }
   const data = asRecord(record.data);
   for (const key of ["id", "messageId", "message_id"]) {

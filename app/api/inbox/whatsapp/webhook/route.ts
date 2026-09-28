@@ -8,6 +8,8 @@ import { safeEqual, verifyInboxWebhook } from "@/lib/whatsapp/webhook-auth";
 
 export const dynamic = "force-dynamic";
 
+const WHATSAPP_PROVIDERS = ["ONESENDER", "WABA", "STARSENDER", "WAHA", "WOOWA", "KIRIMI"] as const;
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const workspaceId = url.searchParams.get("workspaceId") || "";
@@ -90,10 +92,9 @@ export async function POST(req: Request) {
       mediaUrl: parsed.mediaUrl,
       mediaMimeType: parsed.mediaMimeType,
       mediaFilename: parsed.mediaFilename,
-      provider:
-        provider === "ONESENDER" || provider === "WABA" || provider === "STARSENDER"
-          ? (provider as WhatsAppProvider)
-          : setting.whatsappProvider,
+      provider: (WHATSAPP_PROVIDERS as readonly string[]).includes(provider)
+        ? (provider as WhatsAppProvider)
+        : setting.whatsappProvider,
       providerMessageId: parsed.providerMessageId || null,
     });
 

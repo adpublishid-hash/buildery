@@ -971,7 +971,7 @@ export const integrationSettingSchema = z.object({
     .optional()
     .or(z.literal("")),
   whatsappProvider: z
-    .enum(["ONESENDER", "WABA", "STARSENDER"])
+    .enum(["ONESENDER", "WABA", "STARSENDER", "WAHA", "WOOWA", "KIRIMI"])
     .optional()
     .or(z.literal("")),
   whatsappApiKey: z.string().trim().max(500).optional().or(z.literal("")),
@@ -985,6 +985,14 @@ export const integrationSettingSchema = z.object({
     .string()
     .trim()
     .max(120)
+    .optional()
+    .or(z.literal("")),
+  whatsappUserCode: z.string().trim().max(120).optional().or(z.literal("")),
+  whatsappApiBaseUrl: z
+    .string()
+    .trim()
+    .max(300)
+    .regex(/^https?:\/\/[^\s]+$/i, "Gunakan URL lengkap, mis. https://waha.tokoanda.com")
     .optional()
     .or(z.literal("")),
   whatsappWebhookVerifyToken: z

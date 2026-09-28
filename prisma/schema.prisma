@@ -290,6 +290,12 @@ enum WhatsAppProvider {
   ONESENDER
   WABA
   STARSENDER
+  /// Self-hosted WAHA (WhatsApp HTTP API).
+  WAHA
+  /// Woowa, on the account's own server URL.
+  WOOWA
+  /// Kirimi.id hosted gateway.
+  KIRIMI
 }
 
 enum StoreNotificationChannel {
@@ -3624,6 +3630,8 @@ model IntegrationSetting {
   whatsappDefaultTemplateLanguage   String?           @default("en_US")
   whatsappGraphVersion              String?           @default("v25.0")
   whatsappApiBaseUrl                String?
+  /// Kirimi's account "user code", sent with every request next to the secret.
+  whatsappUserCode                  String?
   // Columns from the earlier WhatsApp Cloud / OneSender integration. Nothing
   // reads them any more; they are declared so the schema matches every
   // database that still carries them, and so reconciliation never proposes

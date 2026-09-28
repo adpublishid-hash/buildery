@@ -179,6 +179,8 @@ export default async function IntegrationsSettingsPage() {
               whatsappApiKey: "",
               whatsappSenderNumber: integration?.whatsappSenderNumber ?? "",
               whatsappPhoneNumberId: integration?.whatsappPhoneNumberId ?? "",
+              whatsappApiBaseUrl: integration?.whatsappApiBaseUrl ?? "",
+              whatsappUserCode: integration?.whatsappUserCode ?? "",
               whatsappWebhookVerifyToken: "",
               whatsappWebhookSecret: "",
               whatsappIsActive: integration?.whatsappIsActive ?? false,
