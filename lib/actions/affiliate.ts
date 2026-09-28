@@ -14,6 +14,7 @@ import {
 import { encryptPayoutDetails } from "@/lib/affiliate-payout-details";
 import { canTransitionAffiliate, isAffiliateStatus } from "@/lib/affiliate-status";
 import { UNBATCHED_COMMISSION } from "@/lib/affiliate-overview";
+import { parseOptionalPercent } from "@/lib/affiliate-rates";
 import { getMemberSession } from "@/lib/member-auth";
 import { canInWorkspace, type WorkspacePermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -83,6 +84,7 @@ export async function updateAffiliateProgramAction(formData: FormData): Promise<
     includeShipping: formData.get("includeShipping") === "true",
     includeTax: formData.get("includeTax") === "true",
     includeFees: formData.get("includeFees") === "true",
+    recurringCommissions: formData.get("recurringCommissions") === "true",
     terms: formData.get("terms") || undefined,
   });
   if (!parsed.success) {
@@ -100,6 +102,63 @@ export async function updateAffiliateProgramAction(formData: FormData): Promise<
   revalidatePath("/dashboard/affiliate");
   revalidatePath("/dashboard/affiliate/program");
   revalidatePath(`/site/${context.workspace.slug}/affiliates`);
+  return { ok: true };
+}
+
+/** Opens or closes public applications without touching other program settings. */
+export async function setAffiliateProgramOpenAction(isOpen: boolean): Promise<ActionResult> {
+  const context = await requireAffiliateWorkspace("affiliate.manage");
+  if (!context) return { ok: false, error: "Not allowed." };
+  await prisma.affiliateProgram.upsert({
+    where: { workspaceId: context.workspace.id },
+    update: { isOpen: Boolean(isOpen) },
+    create: { workspaceId: context.workspace.id, isOpen: Boolean(isOpen) },
+  });
+  revalidatePath("/dashboard/affiliate");
+  revalidatePath("/dashboard/affiliate/program");
+  revalidatePath(`/site/${context.workspace.slug}/affiliates`);
+  return { ok: true };
+}
+
+/** A negotiated rate for one partner. Blank clears it back to the item/program rates. */
+export async function setAffiliateCommissionRateAction(affiliateId: string, percent: string): Promise<ActionResult> {
+  const context = await requireAffiliateWorkspace("affiliate.manage");
+  if (!context) return { ok: false, error: "Not allowed." };
+  const parsed = parseOptionalPercent(percent);
+  if (!parsed.ok) return { ok: false, error: "Enter a whole number between 0 and 100, or leave it blank." };
+  const updated = await prisma.affiliate.updateMany({
+    where: { id: affiliateId, workspaceId: context.workspace.id },
+    data: { commissionPercent: parsed.value },
+  });
+  if (!updated.count) return { ok: false, error: "Affiliate not found." };
+  revalidatePath("/dashboard/affiliate");
+  return { ok: true };
+}
+
+export type CommissionRateTarget = "PRODUCT" | "COURSE" | "PLAN";
+
+/** Commission rate for one product, course, or membership plan. Blank uses the program default. */
+export async function setItemCommissionRateAction(
+  target: CommissionRateTarget,
+  id: string,
+  percent: string
+): Promise<ActionResult> {
+  const context = await requireAffiliateWorkspace("affiliate.manage");
+  if (!context) return { ok: false, error: "Not allowed." };
+  const parsed = parseOptionalPercent(percent);
+  if (!parsed.ok) return { ok: false, error: "Enter a whole number between 0 and 100, or leave it blank." };
+  const where = { id, workspaceId: context.workspace.id };
+  const data = { affiliateCommissionPercent: parsed.value };
+  const updated =
+    target === "PRODUCT"
+      ? await prisma.product.updateMany({ where, data })
+      : target === "COURSE"
+        ? await prisma.course.updateMany({ where, data })
+        : target === "PLAN"
+          ? await prisma.membershipPlan.updateMany({ where, data })
+          : { count: 0 };
+  if (!updated.count) return { ok: false, error: "Item not found." };
+  revalidatePath("/dashboard/affiliate/rates");
   return { ok: true };
 }
 

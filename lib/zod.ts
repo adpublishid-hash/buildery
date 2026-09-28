@@ -732,6 +732,7 @@ export const affiliateProgramSchema = z.object({
   includeShipping: formBoolean(),
   includeTax: formBoolean(),
   includeFees: formBoolean(),
+  recurringCommissions: formBoolean(),
   terms: z.string().max(5000).optional(),
 });
 

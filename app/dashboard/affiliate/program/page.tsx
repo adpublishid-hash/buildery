@@ -67,6 +67,7 @@ export default async function AffiliateProgramPage() {
               includeShipping: program.includeShipping,
               includeTax: program.includeTax,
               includeFees: program.includeFees,
+              recurringCommissions: program.recurringCommissions,
               terms: program.terms ?? "",
             }}
           />

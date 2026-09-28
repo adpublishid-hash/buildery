@@ -10,6 +10,7 @@ import {
   Copy,
   Loader2,
   MoreHorizontal,
+  Percent,
   RefreshCw,
   RotateCcw,
   Search,
@@ -51,8 +52,18 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   bulkSetAffiliateStatusAction,
   regenerateReferralCodeAction,
+  setAffiliateCommissionRateAction,
   setAffiliateStatusAction,
 } from "@/lib/actions/affiliate";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   AFFILIATE_STATUS_LABEL,
   affiliateTransitionVerb,
@@ -68,6 +79,8 @@ export type AffiliateRow = {
   joinedAt: Date;
   rejectionReason: string | null;
   hasPayoutAccount: boolean;
+  /** Negotiated rate; null means product/program rates apply. */
+  commissionPercent: number | null;
   clicks: number;
   uniqueClicks: number;
   leads: number;
@@ -132,6 +145,7 @@ export function AffiliatesTable({
   filters,
   counts,
   matchingCount,
+  programPercent,
 }: {
   affiliates: AffiliateRow[];
   appOrigin: string;
@@ -139,6 +153,7 @@ export function AffiliatesTable({
   filters: AffiliateFilters;
   counts: Record<AffiliateFilterStatus, number>;
   matchingCount: number;
+  programPercent: number;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/dashboard/affiliate";
@@ -148,6 +163,8 @@ export function AffiliatesTable({
   const [confirmArchive, setConfirmArchive] = useState<AffiliateRow | null>(null);
   const [confirmReject, setConfirmReject] = useState<{ rows: AffiliateRow[] } | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [rateFor, setRateFor] = useState<AffiliateRow | null>(null);
+  const [rateValue, setRateValue] = useState("");
 
   const selectable = canManage ? affiliates.filter((a) => a.status === "PENDING") : [];
   const selectedRows = selectable.filter((a) => selected.has(a.id));
@@ -225,6 +242,21 @@ export function AffiliatesTable({
       );
       setSelected(new Set());
       done?.();
+      router.refresh();
+    });
+  }
+
+  function saveRate(value: string) {
+    if (!rateFor) return;
+    const row = rateFor;
+    startTransition(async () => {
+      const res = await setAffiliateCommissionRateAction(row.id, value);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(value.trim() ? `${row.customer.name} now earns ${value.trim()}%` : `${row.customer.name} uses the standard rates`);
+      setRateFor(null);
       router.refresh();
     });
   }
@@ -323,7 +355,7 @@ export function AffiliatesTable({
           </p>
         </div>
       ) : (
-        <Table className="min-w-[980px]">
+        <Table className="min-w-[1060px]">
           <TableHeader>
             <TableRow>
               {selectable.length > 0 ? (
@@ -344,6 +376,7 @@ export function AffiliatesTable({
               <TableHead>Referral link</TableHead>
               <TableHead className="text-right">Clicks</TableHead>
               <TableHead className="text-right">Sales</TableHead>
+              <TableHead className="text-right">Rate</TableHead>
               <TableHead className="text-right">Earned</TableHead>
               <TableHead>Joined</TableHead>
               <TableHead className="w-[1%] pr-[14px] text-right">
@@ -422,6 +455,16 @@ export function AffiliatesTable({
                     <p className="text-[11px] text-kv-muted-fg">{a.conversionRate.toFixed(1)}% conv.</p>
                   </TableCell>
                   <TableCell className="kv-tabular text-right">
+                    {a.commissionPercent != null ? (
+                      <>
+                        <p className="text-[13px] font-medium text-kv-fg">{a.commissionPercent}%</p>
+                        <p className="text-[11px] text-kv-muted-fg">custom</p>
+                      </>
+                    ) : (
+                      <p className="text-[13px] text-kv-muted-fg" title="Program default; product rates may differ">{programPercent}%</p>
+                    )}
+                  </TableCell>
+                  <TableCell className="kv-tabular text-right">
                     <p className="text-[13px] font-medium text-kv-fg">{formatPrice(a.earned)}</p>
                     {a.unpaid > 0 ? (
                       <p className="text-[11px] text-kv-muted-fg">{formatPrice(a.unpaid)} unpaid</p>
@@ -470,6 +513,20 @@ export function AffiliatesTable({
                                 <DropdownMenuSeparator />
                               </>
                             ) : null}
+                            {a.status !== "ARCHIVED" ? (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={(e) => {
+                                    e.preventDefault();
+                                    setRateValue(a.commissionPercent == null ? "" : String(a.commissionPercent));
+                                    setRateFor(a);
+                                  }}
+                                >
+                                  <Percent /> Custom rate…
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
+                            ) : null}
                             {transitions.map((to) => {
                               const Icon = to === "ACTIVE" && a.status !== "PENDING" ? RotateCcw : ACTION_META[to].icon;
                               const destructive = to === "ARCHIVED" || to === "REJECTED";
@@ -513,6 +570,51 @@ export function AffiliatesTable({
           {filters.q ? ` · matching “${filters.q}”` : ""}
         </p>
       ) : null}
+
+      <Dialog open={Boolean(rateFor)} onOpenChange={(open) => !open && setRateFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Commission rate for {rateFor?.customer.name}</DialogTitle>
+            <DialogDescription>
+              A custom rate applies to every sale this partner refers and overrides product and program rates.
+              Leave blank to use the standard rates ({programPercent}% by default). Existing commissions keep
+              the rate they were created with.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveRate(rateValue);
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="partner-rate">Commission (%)</Label>
+              <Input
+                id="partner-rate"
+                inputMode="numeric"
+                autoFocus
+                placeholder={`${programPercent} (standard)`}
+                value={rateValue}
+                onChange={(e) => setRateValue(e.target.value.replace(/[^\d]/g, "").slice(0, 3))}
+              />
+            </div>
+            <DialogFooter>
+              {rateFor?.commissionPercent != null ? (
+                <Button type="button" variant="ghost" className="mr-auto" disabled={pending} onClick={() => saveRate("")}>
+                  Remove custom rate
+                </Button>
+              ) : null}
+              <Button type="button" variant="ghost" onClick={() => setRateFor(null)} disabled={pending}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={pending || (rateValue !== "" && Number(rateValue) > 100)}>
+                {pending ? <Loader2 className="animate-spin" /> : null} Save rate
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={Boolean(confirmArchive)} onOpenChange={(o) => !o && setConfirmArchive(null)}>
         <AlertDialogContent>

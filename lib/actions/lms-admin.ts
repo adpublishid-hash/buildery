@@ -10,8 +10,14 @@ import { getCurrentWorkspace } from "@/lib/workspace";
 import { recalculateEnrollmentProgress } from "@/lib/lms-progress";
 import { applyPaymentStatus } from "@/lib/payments";
 import { queueCourseEmailNotification } from "@/lib/store-notifications";
+import {
+  accessExpiryFrom,
+  decideManualEnrollment,
+  parseStudentRows,
+  SEAT_STATUSES,
+} from "@/lib/lms-enrollment-rules";
 
-type Result = { ok: true } | { ok: false; error: string };
+type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
 async function editableWorkspace() {
   const session = await auth();
@@ -101,39 +107,108 @@ export async function createCohortAction(courseId: string, formData: FormData): 
   return { ok: true };
 }
 
-export async function bulkEnrollCourseAction(courseId: string, formData: FormData): Promise<Result> {
+export type BulkEnrollSummary = {
+  created: number;
+  reactivated: number;
+  extended: number;
+  unchanged: number;
+  invalid: string[];
+};
+
+/**
+ * Adds students by hand. Existing enrollments are never downgraded: completed
+ * students keep their completion and longer access is not shortened. New
+ * seats respect the course's enrollment limit, like public enrollment.
+ */
+export async function bulkEnrollCourseAction(
+  courseId: string,
+  formData: FormData
+): Promise<Result<BulkEnrollSummary>> {
   const caller = await ownedCourse(courseId);
   if (!caller) return { ok: false, error: "Course not found." };
-  const course = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { accessDays: true } });
+  const course = await prisma.course.findUniqueOrThrow({
+    where: { id: courseId },
+    select: { title: true, accessDays: true, enrollmentLimit: true },
+  });
   const cohortId = text(formData, "cohortId", 100);
   if (cohortId) {
     const cohort = await prisma.courseCohort.findFirst({ where: { id: cohortId, courseId } });
     if (!cohort) return { ok: false, error: "Cohort not found." };
   }
-  const rows = String(formData.get("students") ?? "").split(/\r?\n/).map((row) => row.trim()).filter(Boolean).slice(0, 500);
-  if (!rows.length) return { ok: false, error: "Add at least one student email." };
-  const accessExpiresAt = course.accessDays > 0 ? new Date(Date.now() + course.accessDays * 86_400_000) : null;
-  await prisma.$transaction(async (tx) => {
-    for (const row of rows) {
-      const [first, second] = row.split(",").map((value) => value.trim());
-      const email = (second || first).toLowerCase();
-      const name = second ? first : email.split("@")[0];
-      if (!/^\S+@\S+\.\S+$/.test(email)) continue;
-      const customer = await tx.customer.upsert({
-        where: { workspaceId_email: { workspaceId: caller.workspace.id, email } },
-        update: {},
-        create: { workspaceId: caller.workspace.id, email, name: name.slice(0, 80) },
-      });
-      await tx.enrollment.upsert({
-        where: { courseId_customerId: { courseId, customerId: customer.id } },
-        update: { status: "ACTIVE", accessExpiresAt, cohortId },
-        create: { workspaceId: caller.workspace.id, courseId, customerId: customer.id, status: "ACTIVE", accessExpiresAt, cohortId },
-      });
+  const { rows, invalid } = parseStudentRows(String(formData.get("students") ?? ""));
+  if (!rows.length) {
+    return { ok: false, error: invalid.length ? `No valid email found (${invalid.length} line(s) skipped).` : "Add at least one student email." };
+  }
+
+  const summary: BulkEnrollSummary = { created: 0, reactivated: 0, extended: 0, unchanged: 0, invalid };
+  const welcome: { customerId: string; email: string; name: string }[] = [];
+  try {
+    await prisma.$transaction(async (tx) => {
+      let seatsLeft = course.enrollmentLimit
+        ? course.enrollmentLimit - (await tx.enrollment.count({ where: { courseId, status: { in: SEAT_STATUSES } } }))
+        : Number.POSITIVE_INFINITY;
+      for (const row of rows) {
+        const customer = await tx.customer.upsert({
+          where: { workspaceId_email: { workspaceId: caller.workspace.id, email: row.email } },
+          update: {},
+          create: { workspaceId: caller.workspace.id, email: row.email, name: row.name },
+        });
+        const existing = await tx.enrollment.findUnique({
+          where: { courseId_customerId: { courseId, customerId: customer.id } },
+          select: { id: true, status: true, accessExpiresAt: true },
+        });
+        const decision = decideManualEnrollment(existing, course.accessDays);
+        if (decision.action === "create" || decision.action === "reactivate") {
+          if (seatsLeft <= 0) throw new EnrollmentLimitError();
+          seatsLeft -= 1;
+        }
+        if (decision.action === "create") {
+          await tx.enrollment.create({
+            data: { workspaceId: caller.workspace.id, courseId, customerId: customer.id, status: "ACTIVE", accessExpiresAt: decision.accessExpiresAt, cohortId },
+          });
+          summary.created += 1;
+          welcome.push({ customerId: customer.id, email: customer.email, name: customer.name });
+        } else if (decision.action === "reactivate") {
+          await tx.enrollment.update({
+            where: { id: existing!.id },
+            data: { status: "ACTIVE", accessExpiresAt: decision.accessExpiresAt, ...(cohortId ? { cohortId } : {}) },
+          });
+          summary.reactivated += 1;
+          welcome.push({ customerId: customer.id, email: customer.email, name: customer.name });
+        } else if (decision.action === "extend") {
+          await tx.enrollment.update({
+            where: { id: existing!.id },
+            data: { accessExpiresAt: decision.accessExpiresAt, ...(cohortId ? { cohortId } : {}) },
+          });
+          summary.extended += 1;
+        } else {
+          if (cohortId && existing) await tx.enrollment.update({ where: { id: existing.id }, data: { cohortId } });
+          summary.unchanged += 1;
+        }
+      }
+    });
+  } catch (error) {
+    if (error instanceof EnrollmentLimitError) {
+      return { ok: false, error: `This course is limited to ${course.enrollmentLimit} students and has no seats left for everyone on the list. Nothing was changed.` };
     }
-  });
+    throw error;
+  }
+
+  for (const student of welcome) {
+    queueCourseEmailNotification(prisma, {
+      workspaceId: caller.workspace.id,
+      customerId: student.customerId,
+      recipient: student.email,
+      event: "COURSE_ENROLLED",
+      subject: `Course access: ${course.title}`,
+      body: `Hi ${student.name}, you now have access to ${course.title}.`,
+    }).catch((error) => console.warn("Course enrollment email failed", error));
+  }
   refreshCourse(courseId);
-  return { ok: true };
+  return { ok: true, data: summary };
 }
+
+class EnrollmentLimitError extends Error {}
 
 export async function createQuizAction(lessonId: string, formData: FormData): Promise<Result> {
   const lesson = await ownedLesson(lessonId);
@@ -210,11 +285,17 @@ export async function gradeAssignmentAction(submissionId: string, formData: Form
     where: { id: submissionId },
     select: {
       enrollmentId: true,
+      status: true,
       assignment: { select: { maxScore: true, lessonId: true, lesson: { select: { module: { select: { courseId: true } } } } } },
     },
   });
   const caller = submission ? await ownedCourse(submission.assignment.lesson.module.courseId) : null;
   if (!submission || !caller) return { ok: false, error: "Submission not found." };
+  // Drafts and work sent back for revision aren't ready; a grade can be corrected later.
+  if (submission.status !== "SUBMITTED" && submission.status !== "GRADED") {
+    return { ok: false, error: "This submission isn't waiting for a grade." };
+  }
+  if (String(formData.get("score") ?? "").trim() === "") return { ok: false, error: "Enter a score." };
   const score = int(formData, "score", 0, submission.assignment.maxScore);
   await prisma.$transaction(async (tx) => {
     await tx.assignmentSubmission.update({
@@ -227,6 +308,28 @@ export async function gradeAssignmentAction(submissionId: string, formData: Form
       create: { enrollmentId: submission.enrollmentId, lessonId: submission.assignment.lessonId, startedAt: new Date(), completedAt: new Date(), progressPercent: 100 },
     });
     await recalculateEnrollmentProgress(tx, submission.enrollmentId);
+  });
+  refreshCourse(submission.assignment.lesson.module.courseId);
+  return { ok: true };
+}
+
+/**
+ * Sends work back for another attempt with feedback. The lesson stays
+ * incomplete and the learner can resubmit.
+ */
+export async function returnAssignmentAction(submissionId: string, formData: FormData): Promise<Result> {
+  const submission = await prisma.assignmentSubmission.findUnique({
+    where: { id: submissionId },
+    select: { status: true, assignment: { select: { lesson: { select: { module: { select: { courseId: true } } } } } } },
+  });
+  const caller = submission ? await ownedCourse(submission.assignment.lesson.module.courseId) : null;
+  if (!submission || !caller) return { ok: false, error: "Submission not found." };
+  if (submission.status !== "SUBMITTED") return { ok: false, error: "Only submitted work can be returned." };
+  const feedback = text(formData, "feedback", 5_000);
+  if (!feedback) return { ok: false, error: "Tell the learner what to change." };
+  await prisma.assignmentSubmission.update({
+    where: { id: submissionId },
+    data: { status: "RETURNED", feedback, score: null, gradedAt: new Date(), gradedById: caller.userId },
   });
   refreshCourse(submission.assignment.lesson.module.courseId);
   return { ok: true };
@@ -293,7 +396,10 @@ export async function duplicateCourseAction(courseId: string): Promise<Result> {
 }
 
 export async function updateEnrollmentAdminAction(enrollmentId: string, formData: FormData): Promise<Result> {
-  const enrollment = await prisma.enrollment.findUnique({ where: { id: enrollmentId }, select: { courseId: true } });
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { courseId: true, course: { select: { accessDays: true } } },
+  });
   const caller = enrollment ? await ownedCourse(enrollment.courseId) : null;
   if (!enrollment || !caller) return { ok: false, error: "Enrollment not found." };
   const operation = text(formData, "operation", 30);
@@ -310,7 +416,12 @@ export async function updateEnrollmentAdminAction(enrollmentId: string, formData
       prisma.courseCertificate.updateMany({ where: { enrollmentId, revokedAt: null }, data: { revokedAt: new Date() } }),
     ]);
   } else if (operation === "ACTIVATE") {
-    await prisma.enrollment.update({ where: { id: enrollmentId }, data: { status: "ACTIVE", accessExpiresAt: date(formData, "accessExpiresAt") } });
+    // Without an explicit date, grant the course's normal access period
+    // (lifetime only when the course itself is lifetime).
+    await prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: { status: "ACTIVE", accessExpiresAt: date(formData, "accessExpiresAt") ?? accessExpiryFrom(enrollment.course.accessDays) },
+    });
   } else {
     return { ok: false, error: "Unknown operation." };
   }
@@ -385,6 +496,8 @@ function safeUrl(value: string | null) {
 }
 
 function refreshCourse(courseId: string) {
+  revalidatePath("/dashboard/courses/students");
+  revalidatePath("/dashboard/courses/grading");
   revalidatePath(`/dashboard/courses/${courseId}/tools`);
   revalidatePath(`/dashboard/courses/${courseId}/students`);
   revalidatePath(`/dashboard/courses/${courseId}/insights`);

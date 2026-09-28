@@ -3,6 +3,7 @@ import {
   BarChart3,
   Bell,
   Boxes,
+  ClipboardCheck,
   ClipboardList,
   CreditCard,
   Eye,
@@ -221,6 +222,18 @@ export const dashboardNav: NavSection[] = [
             label: "Courses",
             href: "/dashboard/courses",
             icon: GraduationCap,
+            permission: "sites.view",
+          },
+          {
+            label: "Students",
+            href: "/dashboard/courses/students",
+            icon: Users,
+            permission: "sites.view",
+          },
+          {
+            label: "Grading",
+            href: "/dashboard/courses/grading",
+            icon: ClipboardCheck,
             permission: "sites.view",
           },
           {

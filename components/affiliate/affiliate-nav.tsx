@@ -1,14 +1,16 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Banknote, Coins, Settings2, Users } from "lucide-react";
+import { Banknote, Coins, Link2, Percent, Settings2, Users } from "lucide-react";
 
 import { TabBar } from "@/components/ui/tab-bar";
 
 const items = [
-  { key: "affiliates", href: "/dashboard/affiliate", label: "Affiliates", icon: Users },
+  { key: "affiliates", href: "/dashboard/affiliate", label: "Partners", icon: Users },
+  { key: "referrals", href: "/dashboard/affiliate/referrals", label: "Referrals", icon: Link2 },
   { key: "commissions", href: "/dashboard/affiliate/commissions", label: "Commissions", icon: Coins },
   { key: "payouts", href: "/dashboard/affiliate/payouts", label: "Payouts", icon: Banknote },
+  { key: "rates", href: "/dashboard/affiliate/rates", label: "Rates", icon: Percent },
   { key: "program", href: "/dashboard/affiliate/program", label: "Program", icon: Settings2 },
 ];
 

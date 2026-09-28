@@ -242,6 +242,11 @@ export async function submitAssignmentAction(
   const text = submissionText.trim().slice(0, 20_000);
   const url = safeHttpUrl(fileUrl);
   if (!text && !url) return { ok: false, error: "Add an answer or file URL." };
+  const existing = await prisma.assignmentSubmission.findUnique({
+    where: { assignmentId_enrollmentId: { assignmentId, enrollmentId } },
+    select: { status: true },
+  });
+  if (existing?.status === "GRADED") return { ok: false, error: "This assignment has already been graded." };
   await prisma.assignmentSubmission.upsert({
     where: { assignmentId_enrollmentId: { assignmentId, enrollmentId } },
     update: { submissionText: text || null, fileUrl: url, status: "SUBMITTED", submittedAt: new Date() },

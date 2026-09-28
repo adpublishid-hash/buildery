@@ -2,6 +2,7 @@ import "server-only";
 
 import type { CommissionSourceType, Prisma, PrismaClient } from "@prisma/client";
 import { queueAffiliateEmailNotification } from "@/lib/store-notifications";
+import { commissionAmount, resolveCommissionRateBps } from "@/lib/affiliate-rates";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 
@@ -15,6 +16,11 @@ type CommissionInput = {
   purchaserCustomerId?: string | null;
   purchaserEmail?: string | null;
   orderId?: string | null;
+  /**
+   * Rate set on what was sold (product, course, plan), in basis points, or a
+   * blended rate for a multi-product order. Omit to use the program default.
+   */
+  itemRateBps?: number | null;
 };
 
 /**
@@ -49,9 +55,14 @@ export async function createAffiliateCommission(tx: Tx, input: CommissionInput) 
   const existing = await tx.commission.findUnique({ where: { sourceKey } });
   if (existing) return existing;
   const basisAmount = Math.max(0, Math.floor(input.basisAmount));
-  const percent = affiliate.program.commissionPercent;
-  const rateBps = percent * 100;
-  const amount = Math.floor((basisAmount * rateBps) / 10_000);
+  const rateBps = resolveCommissionRateBps({
+    affiliatePercent: affiliate.commissionPercent,
+    itemRateBps: input.itemRateBps,
+    programPercent: affiliate.program.commissionPercent,
+  });
+  // `percent` is the legacy whole-number column; `rateBps` is authoritative.
+  const percent = Math.round(rateBps / 100);
+  const amount = commissionAmount(basisAmount, rateBps);
   if (amount <= 0) return null;
   const availableAt = new Date(
     Date.now() + Math.max(0, affiliate.program.holdDays) * 24 * 60 * 60 * 1000
@@ -96,6 +107,34 @@ export async function createAffiliateCommission(tx: Tx, input: CommissionInput) 
     body: `A new ${input.sourceLabel} sale generated a commission of Rp${amount.toLocaleString("id-ID")}. It will be eligible after the refund hold period.`,
   });
   return commission;
+}
+
+/**
+ * The partner who referred a membership's earlier paid purchase, for paying a
+ * renewal that arrived without a fresh referral click. Null unless the program
+ * pays recurring commissions.
+ */
+export async function recurringReferrerForMembership(
+  tx: Tx,
+  input: { workspaceId: string; customerMembershipId: string; excludePaymentId: string }
+) {
+  const program = await tx.affiliateProgram.findUnique({
+    where: { workspaceId: input.workspaceId },
+    select: { recurringCommissions: true },
+  });
+  if (!program?.recurringCommissions) return null;
+  const original = await tx.payment.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      customerMembershipId: input.customerMembershipId,
+      id: { not: input.excludePaymentId },
+      status: "PAID",
+      referralAffiliateId: { not: null },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { referralAffiliateId: true },
+  });
+  return original?.referralAffiliateId ?? null;
 }
 
 export function orderCommissionBasis(order: {

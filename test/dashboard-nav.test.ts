@@ -16,6 +16,9 @@ describe("dashboard nav location", () => {
     expect(where("/dashboard/blog")).toEqual(["Content", "Posts"]);
     expect(where("/dashboard/media")).toEqual(["Content", "Media"]);
     expect(where("/dashboard/membership/plans")).toEqual(["LMS", "Membership"]);
+    expect(where("/dashboard/courses/students")).toEqual(["LMS", "Students"]);
+    expect(where("/dashboard/courses/grading")).toEqual(["LMS", "Grading"]);
+    expect(where("/dashboard/courses/cmabc123def456ghi789jkl/students")).toEqual(["LMS", "Courses"]);
   });
 
   it("picks the most specific child when paths nest", () => {

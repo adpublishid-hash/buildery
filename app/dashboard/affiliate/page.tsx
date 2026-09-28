@@ -37,6 +37,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { CopyLinkButton } from "@/components/dashboard/copy-link-button";
 import { AffiliateNav } from "@/components/affiliate/affiliate-nav";
 import { AddAffiliateButton } from "@/components/affiliate/add-affiliate-dialog";
+import { ProgramOpenToggle } from "@/components/affiliate/program-open-toggle";
 import { Pagination, parsePage } from "@/components/ui/pagination";
 import {
   AffiliatesTable,
@@ -158,6 +159,7 @@ export default async function AffiliatesPage({
       description="Invite affiliates and pay a commission on every sale they refer."
       action={
         <>
+          {canManage ? <ProgramOpenToggle isOpen={program.isOpen} /> : null}
           <Button asChild variant="outline">
             <Link href={applicationUrl} target="_blank">
               <Eye /> Application page
@@ -272,6 +274,7 @@ export default async function AffiliatesPage({
     joinedAt: a.approvedAt ?? a.appliedAt,
     rejectionReason: a.rejectionReason,
     hasPayoutAccount: Boolean(a.payoutDetailsEncrypted),
+    commissionPercent: a.commissionPercent,
     ...performanceFor(performance, a.id),
   }));
 
@@ -340,6 +343,7 @@ export default async function AffiliatesPage({
           filters={filters}
           counts={counts}
           matchingCount={matchingCount}
+          programPercent={program.commissionPercent}
         />
         <Pagination
           page={page}

@@ -53,9 +53,19 @@ Implemented on 18 September 2026.
 - [x] Payouts: failed or cancelled batches release their commissions for re-batching; `FAILED` is now final, like `PAID` and `CANCELLED`
 - [x] Payouts are only offered for active or suspended affiliates, matching the server rule
 
+## Rates, referrals, and recurring commissions (28 September 2026)
+
+- [x] Per-item commission rates for products, courses, and membership plans (Rates tab)
+- [x] Negotiated rate per partner; precedence is partner rate > item rate > program default
+- [x] Multi-product orders use each line's rate weighted by its value (`lib/affiliate-rates.ts`)
+- [x] Optional recurring commission: membership renewals pay the original referrer without a fresh click
+- [x] Referral log (clicks, leads, sales) with partner, landing page, source, and order, bots hidden
+- [x] One-click open/close for public applications
+- [x] Migration: `20260928120000_affiliate_rates_recurring` (nullable columns; existing behaviour unchanged)
+
 ## Deployment
 
-1. Apply `20260918130000_affiliate_platform_upgrade`.
+1. Apply `20260918130000_affiliate_platform_upgrade` and `20260928120000_affiliate_rates_recurring`.
 2. Run `prisma generate` after deployment.
 3. Ensure the background job runner is active so `AFFILIATE_LIFECYCLE_SWEEP` runs hourly.
 4. Optionally set `AFFILIATE_ATTRIBUTION_SECRET` and `AFFILIATE_PAYOUT_SECRET`; both fall back to `NEXTAUTH_SECRET`.

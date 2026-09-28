@@ -1214,48 +1214,50 @@ model ProductCategory {
 }
 
 model Product {
-  id                     String             @id @default(cuid())
-  workspaceId            String
-  categoryId             String?
-  imageId                String?
-  name                   String
-  slug                   String
-  description            String?            @db.Text
-  details                String?            @db.Text
-  type                   ProductType        @default(PHYSICAL)
-  status                 ProductStatus      @default(DRAFT)
-  pricingMode            ProductPricingMode @default(ONE_TIME)
-  price                  Int // whole currency units (e.g. rupiah)
-  costPrice              Int?               @default(0)
-  discountPrice          Int?
-  stock                  Int                @default(0)
-  sku                    String?
-  lowStockThreshold      Int?
-  lowStockAlertedAt      DateTime?
-  lowStockResolvedAt     DateTime?
-  metaTitle              String?
-  metaDescription        String?
-  downloadUrl            String?
-  downloadLabel          String?
+  id                         String             @id @default(cuid())
+  workspaceId                String
+  categoryId                 String?
+  imageId                    String?
+  name                       String
+  slug                       String
+  description                String?            @db.Text
+  details                    String?            @db.Text
+  type                       ProductType        @default(PHYSICAL)
+  status                     ProductStatus      @default(DRAFT)
+  pricingMode                ProductPricingMode @default(ONE_TIME)
+  price                      Int // whole currency units (e.g. rupiah)
+  /// Affiliate commission for this product, in percent. Null = program default.
+  affiliateCommissionPercent Int?
+  costPrice                  Int?               @default(0)
+  discountPrice              Int?
+  stock                      Int                @default(0)
+  sku                        String?
+  lowStockThreshold          Int?
+  lowStockAlertedAt          DateTime?
+  lowStockResolvedAt         DateTime?
+  metaTitle                  String?
+  metaDescription            String?
+  downloadUrl                String?
+  downloadLabel              String?
   // Multiple post-purchase access links. Falls back to downloadUrl/Label
   // for products created before this existed.
-  digitalAccessItems     Json               @default("[]")
-  serviceLocation        String?
-  serviceDurationMinutes Int?
-  eventStartsAt          DateTime?
-  eventEndsAt            DateTime?
-  eventLocation          String?
-  weightGrams            Int?
-  lengthCm               Int?
-  widthCm                Int?
-  heightCm               Int?
-  galleryImageIds        String[]           @default([])
+  digitalAccessItems         Json               @default("[]")
+  serviceLocation            String?
+  serviceDurationMinutes     Int?
+  eventStartsAt              DateTime?
+  eventEndsAt                DateTime?
+  eventLocation              String?
+  weightGrams                Int?
+  lengthCm                   Int?
+  widthCm                    Int?
+  heightCm                   Int?
+  galleryImageIds            String[]           @default([])
   /// Option axes a variant is built from, e.g.
   /// `[{ "name": "Warna", "values": ["Hitam", "Putih"] }]`.
   /// Variants carry the chosen value per axis in their own `options`, which is
   /// what lets the storefront show one selector per axis instead of a flat
   /// list of hand-typed names.
-  variantOptions         Json               @default("[]")
+  variantOptions             Json               @default("[]")
 
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   category           ProductCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -2072,17 +2074,17 @@ model MetaCapiEvent {
 /// An extra Meta or TikTok pixel. Every event the primary pixel gets goes to
 /// these too, in the browser and (with a token) through CAPI / Events API.
 model AdPixel {
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   workspaceId   String
   /// "META" | "TIKTOK"
   provider      String
   pixelId       String
   label         String?
   /// Server-side copy (Meta CAPI / TikTok Events API). Never sent to a browser.
-  serverEnabled Boolean  @default(false)
-  accessToken   String?  @db.Text
+  serverEnabled Boolean @default(false)
+  accessToken   String? @db.Text
   testEventCode String?
-  isActive      Boolean  @default(true)
+  isActive      Boolean @default(true)
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -2436,31 +2438,33 @@ model PaymentReconciliationEvent {
 // ============================================================
 
 model Course {
-  id                 String           @id @default(cuid())
-  workspaceId        String
-  imageId            String?
-  title              String
-  slug               String
-  summary            String?
-  description        String?          @db.Text
-  status             CourseStatus     @default(DRAFT)
-  isFree             Boolean          @default(true)
-  price              Int              @default(0)
-  requiredLevel      MembershipLevel  @default(FREE)
-  publishedAt        DateTime?
-  categoryId         String?
-  instructorName     String?
-  instructorBio      String?          @db.Text
-  difficulty         CourseDifficulty @default(BEGINNER)
-  durationMinutes    Int              @default(0)
-  accessDays         Int              @default(0)
-  enrollmentLimit    Int?
-  sequentialProgress Boolean          @default(false)
-  certificateEnabled Boolean          @default(false)
-  featured           Boolean          @default(false)
-  tags               String[]         @default([])
-  seoTitle           String?
-  metaDescription    String?
+  id                         String           @id @default(cuid())
+  workspaceId                String
+  imageId                    String?
+  title                      String
+  slug                       String
+  summary                    String?
+  description                String?          @db.Text
+  status                     CourseStatus     @default(DRAFT)
+  isFree                     Boolean          @default(true)
+  price                      Int              @default(0)
+  /// Affiliate commission for this course, in percent. Null = program default.
+  affiliateCommissionPercent Int?
+  requiredLevel              MembershipLevel  @default(FREE)
+  publishedAt                DateTime?
+  categoryId                 String?
+  instructorName             String?
+  instructorBio              String?          @db.Text
+  difficulty                 CourseDifficulty @default(BEGINNER)
+  durationMinutes            Int              @default(0)
+  accessDays                 Int              @default(0)
+  enrollmentLimit            Int?
+  sequentialProgress         Boolean          @default(false)
+  certificateEnabled         Boolean          @default(false)
+  featured                   Boolean          @default(false)
+  tags                       String[]         @default([])
+  seoTitle                   String?
+  metaDescription            String?
 
   workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   image         UploadFile?          @relation("CourseImage", fields: [imageId], references: [id], onDelete: SetNull)
@@ -3177,22 +3181,24 @@ model FormDelivery {
 // ============================================================
 
 model AffiliateProgram {
-  id                String                    @id @default(cuid())
-  workspaceId       String                    @unique
-  name              String                    @default("Affiliate Program")
-  description       String?
-  commissionPercent Int                       @default(20)
-  isOpen            Boolean                   @default(true)
-  approvalMode      AffiliateApprovalMode     @default(MANUAL)
-  attributionModel  AffiliateAttributionModel @default(LAST_CLICK)
-  attributionDays   Int                       @default(30)
-  holdDays          Int                       @default(14)
-  minimumPayout     Int                       @default(100000)
-  allowSelfReferral Boolean                   @default(false)
-  includeShipping   Boolean                   @default(false)
-  includeTax        Boolean                   @default(false)
-  includeFees       Boolean                   @default(false)
-  terms             String?                   @db.Text
+  id                   String                    @id @default(cuid())
+  workspaceId          String                    @unique
+  name                 String                    @default("Affiliate Program")
+  description          String?
+  commissionPercent    Int                       @default(20)
+  isOpen               Boolean                   @default(true)
+  approvalMode         AffiliateApprovalMode     @default(MANUAL)
+  attributionModel     AffiliateAttributionModel @default(LAST_CLICK)
+  attributionDays      Int                       @default(30)
+  holdDays             Int                       @default(14)
+  minimumPayout        Int                       @default(100000)
+  allowSelfReferral    Boolean                   @default(false)
+  includeShipping      Boolean                   @default(false)
+  includeTax           Boolean                   @default(false)
+  includeFees          Boolean                   @default(false)
+  /// Pay the original referrer again on membership renewals, even without a fresh click.
+  recurringCommissions Boolean                   @default(false)
+  terms                String?                   @db.Text
 
   workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   affiliates Affiliate[]
@@ -3219,6 +3225,8 @@ model Affiliate {
   payoutAccountLabel     String?
   payoutDetailsEncrypted String?                @db.Text
   termsAcceptedAt        DateTime?
+  /// Negotiated rate for this partner, in percent; beats every other rate. Null = none.
+  commissionPercent      Int?
 
   program     AffiliateProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
   workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -3447,21 +3455,23 @@ model Coupon {
 }
 
 model MembershipPlan {
-  id          String          @id @default(cuid())
-  workspaceId String
-  productId   String?
-  name        String
-  slug        String
-  description String?
-  level       MembershipLevel
-  price       Int             @default(0)
-  accessDays  Int             @default(0)
-  isActive    Boolean         @default(true)
-  benefits    Json            @default("[]")
-  recommended Boolean         @default(false)
-  ctaLabel    String?
-  sortOrder   Int             @default(0)
-  archivedAt  DateTime?
+  id                         String          @id @default(cuid())
+  workspaceId                String
+  productId                  String?
+  name                       String
+  slug                       String
+  description                String?
+  level                      MembershipLevel
+  price                      Int             @default(0)
+  /// Affiliate commission for this plan, in percent. Null = program default.
+  affiliateCommissionPercent Int?
+  accessDays                 Int             @default(0)
+  isActive                   Boolean         @default(true)
+  benefits                   Json            @default("[]")
+  recommended                Boolean         @default(false)
+  ctaLabel                   String?
+  sortOrder                  Int             @default(0)
+  archivedAt                 DateTime?
 
   workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   product     Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
