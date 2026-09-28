@@ -256,6 +256,7 @@ async function testWhatsApp(
       whatsappGraphVersion: true,
       whatsappApiBaseUrl: true,
       whatsappIsActive: true,
+      whatsappUserCode: true,
     },
   });
   if (!setting?.whatsappProvider) {
@@ -295,6 +296,73 @@ async function testWhatsApp(
       message: `Terhubung ke ${json?.verified_name ?? "nomor"} (${
         json?.display_phone_number ?? setting.whatsappPhoneNumberId
       }).`,
+    };
+  }
+
+  if (setting.whatsappProvider === "WAHA") {
+    if (!setting.whatsappApiBaseUrl) {
+      return { ok: false, error: "URL server WAHA belum diisi." };
+    }
+    const session = setting.whatsappPhoneNumberId || "default";
+    const res = await fetchWithTimeout(
+      `${setting.whatsappApiBaseUrl.replace(/\/+$/, "")}/api/sessions/${encodeURIComponent(session)}`,
+      { headers: { "X-Api-Key": key, Accept: "application/json" } }
+    );
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, error: "API key WAHA ditolak server." };
+    }
+    if (res.status === 404) {
+      return { ok: false, error: `Session "${session}" tidak ada di server WAHA.` };
+    }
+    const json = (await res.json().catch(() => null)) as
+      | { status?: string; me?: { id?: string; pushName?: string } | null }
+      | null;
+    if (!res.ok) return { ok: false, error: `WAHA menjawab HTTP ${res.status}.` };
+    if (json?.status !== "WORKING") {
+      return {
+        ok: false,
+        error: `Session "${session}" berstatus ${json?.status ?? "tidak diketahui"}. Scan QR di dashboard WAHA sampai WORKING.`,
+      };
+    }
+    const number = json.me?.id?.split("@")[0];
+    return { ok: true, message: `Session "${session}" aktif${number ? ` (${number})` : ""}.` };
+  }
+
+  if (setting.whatsappProvider === "KIRIMI") {
+    if (!setting.whatsappUserCode || !setting.whatsappPhoneNumberId) {
+      return { ok: false, error: "User Code dan Device ID Kirimi wajib diisi." };
+    }
+    const base = (setting.whatsappApiBaseUrl || "https://api.kirimi.id").replace(/\/+$/, "");
+    const res = await fetchWithTimeout(`${base}/v1/device-status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        user_code: setting.whatsappUserCode,
+        secret: key,
+        device_id: setting.whatsappPhoneNumberId,
+      }),
+    });
+    const json = (await res.json().catch(() => null)) as
+      | { success?: boolean; message?: string; data?: { status?: string } }
+      | null;
+    if (!res.ok || json?.success === false) {
+      return { ok: false, error: `Kirimi menolak: ${json?.message ?? `HTTP ${res.status}`}` };
+    }
+    const status = json?.data?.status;
+    if (status && status !== "connected") {
+      return { ok: false, error: `Device Kirimi berstatus ${status}. Hubungkan ulang di dashboard Kirimi.` };
+    }
+    return { ok: true, message: "Device Kirimi terhubung." };
+  }
+
+  if (setting.whatsappProvider === "WOOWA") {
+    // Woowa has no read-only endpoint; reaching the host is all that can be
+    // proved without sending a message.
+    const base = (setting.whatsappApiBaseUrl || "https://notifapi.com").replace(/\/+$/, "");
+    const res = await fetchWithTimeout(base, { method: "GET" });
+    return {
+      ok: true,
+      message: `Server Woowa menjawab HTTP ${res.status}. Kirim pesan uji dari Inbox untuk memastikan key diterima.`,
     };
   }
 

@@ -12,6 +12,9 @@ import {
   issueAffiliateVerificationCode,
 } from "@/lib/affiliate-verification";
 import { encryptPayoutDetails } from "@/lib/affiliate-payout-details";
+import { canTransitionAffiliate, isAffiliateStatus } from "@/lib/affiliate-status";
+import { UNBATCHED_COMMISSION } from "@/lib/affiliate-overview";
+import { parseOptionalPercent } from "@/lib/affiliate-rates";
 import { getMemberSession } from "@/lib/member-auth";
 import { canInWorkspace, type WorkspacePermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -81,6 +84,7 @@ export async function updateAffiliateProgramAction(formData: FormData): Promise<
     includeShipping: formData.get("includeShipping") === "true",
     includeTax: formData.get("includeTax") === "true",
     includeFees: formData.get("includeFees") === "true",
+    recurringCommissions: formData.get("recurringCommissions") === "true",
     terms: formData.get("terms") || undefined,
   });
   if (!parsed.success) {
@@ -95,7 +99,66 @@ export async function updateAffiliateProgramAction(formData: FormData): Promise<
     update: parsed.data,
     create: { workspaceId: context.workspace.id, ...parsed.data },
   });
+  revalidatePath("/dashboard/affiliate");
   revalidatePath("/dashboard/affiliate/program");
+  revalidatePath(`/site/${context.workspace.slug}/affiliates`);
+  return { ok: true };
+}
+
+/** Opens or closes public applications without touching other program settings. */
+export async function setAffiliateProgramOpenAction(isOpen: boolean): Promise<ActionResult> {
+  const context = await requireAffiliateWorkspace("affiliate.manage");
+  if (!context) return { ok: false, error: "Not allowed." };
+  await prisma.affiliateProgram.upsert({
+    where: { workspaceId: context.workspace.id },
+    update: { isOpen: Boolean(isOpen) },
+    create: { workspaceId: context.workspace.id, isOpen: Boolean(isOpen) },
+  });
+  revalidatePath("/dashboard/affiliate");
+  revalidatePath("/dashboard/affiliate/program");
+  revalidatePath(`/site/${context.workspace.slug}/affiliates`);
+  return { ok: true };
+}
+
+/** A negotiated rate for one partner. Blank clears it back to the item/program rates. */
+export async function setAffiliateCommissionRateAction(affiliateId: string, percent: string): Promise<ActionResult> {
+  const context = await requireAffiliateWorkspace("affiliate.manage");
+  if (!context) return { ok: false, error: "Not allowed." };
+  const parsed = parseOptionalPercent(percent);
+  if (!parsed.ok) return { ok: false, error: "Enter a whole number between 0 and 100, or leave it blank." };
+  const updated = await prisma.affiliate.updateMany({
+    where: { id: affiliateId, workspaceId: context.workspace.id },
+    data: { commissionPercent: parsed.value },
+  });
+  if (!updated.count) return { ok: false, error: "Affiliate not found." };
+  revalidatePath("/dashboard/affiliate");
+  return { ok: true };
+}
+
+export type CommissionRateTarget = "PRODUCT" | "COURSE" | "PLAN";
+
+/** Commission rate for one product, course, or membership plan. Blank uses the program default. */
+export async function setItemCommissionRateAction(
+  target: CommissionRateTarget,
+  id: string,
+  percent: string
+): Promise<ActionResult> {
+  const context = await requireAffiliateWorkspace("affiliate.manage");
+  if (!context) return { ok: false, error: "Not allowed." };
+  const parsed = parseOptionalPercent(percent);
+  if (!parsed.ok) return { ok: false, error: "Enter a whole number between 0 and 100, or leave it blank." };
+  const where = { id, workspaceId: context.workspace.id };
+  const data = { affiliateCommissionPercent: parsed.value };
+  const updated =
+    target === "PRODUCT"
+      ? await prisma.product.updateMany({ where, data })
+      : target === "COURSE"
+        ? await prisma.course.updateMany({ where, data })
+        : target === "PLAN"
+          ? await prisma.membershipPlan.updateMany({ where, data })
+          : { count: 0 };
+  if (!updated.count) return { ok: false, error: "Item not found." };
+  revalidatePath("/dashboard/affiliate/rates");
   return { ok: true };
 }
 
@@ -167,7 +230,8 @@ export async function addAffiliateAction(formData: FormData): Promise<ActionResu
     where: { programId_customerId: { programId: program.id, customerId: customer.id } },
   });
   if (existing && existing.status !== "ARCHIVED") {
-    return { ok: false, error: "That customer is already an affiliate.", fieldErrors: { email: ["Already an affiliate."] } };
+    const state = existing.status === "PENDING" ? "has a pending application" : `is already ${existing.status.toLowerCase()} in the program`;
+    return { ok: false, error: `This customer ${state}.`, fieldErrors: { email: [`This customer ${state}.`] } };
   }
   const now = new Date();
   if (existing) {
@@ -230,21 +294,30 @@ export async function removeAffiliateAction(affiliateId: string): Promise<Action
   return setAffiliateStatusAction(affiliateId, "ARCHIVED");
 }
 
-export async function setAffiliateStatusAction(
+type AffiliateContext = NonNullable<Awaited<ReturnType<typeof requireAffiliateWorkspace>>>;
+
+async function applyAffiliateStatus(
+  context: AffiliateContext,
   affiliateId: string,
   status: AffiliateStatus,
   reason?: string
 ): Promise<ActionResult> {
-  const context = await requireAffiliateWorkspace("affiliate.manage");
-  if (!context) return { ok: false, error: "Not allowed." };
   const affiliate = await prisma.affiliate.findFirst({
     where: { id: affiliateId, workspaceId: context.workspace.id },
     include: { customer: { select: { id: true, email: true } } },
   });
   if (!affiliate) return { ok: false, error: "Affiliate not found." };
+  if (!canTransitionAffiliate(affiliate.status, status)) {
+    return {
+      ok: false,
+      error: `A ${affiliate.status.toLowerCase()} affiliate can't be set to ${status.toLowerCase()}.`,
+    };
+  }
   const now = new Date();
-  await prisma.affiliate.update({
-    where: { id: affiliateId },
+  // Guard against a concurrent change: only update while the status is still
+  // the one the transition was validated against.
+  const updated = await prisma.affiliate.updateMany({
+    where: { id: affiliateId, status: affiliate.status },
     data: {
       status,
       approvedAt: status === "ACTIVE" ? affiliate.approvedAt ?? now : affiliate.approvedAt,
@@ -253,7 +326,8 @@ export async function setAffiliateStatusAction(
       rejectionReason: status === "REJECTED" ? reason?.slice(0, 500) || "Application rejected" : null,
     },
   });
-  if (status === "ACTIVE" && affiliate.status !== "ACTIVE") {
+  if (!updated.count) return { ok: false, error: "The affiliate changed in the meantime. Refresh and try again." };
+  if (status === "ACTIVE") {
     await queueAffiliateEmailNotification(prisma, {
       workspaceId: context.workspace.id,
       customerId: affiliate.customer.id,
@@ -263,8 +337,41 @@ export async function setAffiliateStatusAction(
       body: `Your affiliate account is active. Your referral code is ${affiliate.referralCode}.`,
     });
   }
-  revalidatePath("/dashboard/affiliate");
   return { ok: true };
+}
+
+export async function setAffiliateStatusAction(
+  affiliateId: string,
+  status: AffiliateStatus,
+  reason?: string
+): Promise<ActionResult> {
+  const context = await requireAffiliateWorkspace("affiliate.manage");
+  if (!context) return { ok: false, error: "Not allowed." };
+  if (!isAffiliateStatus(status)) return { ok: false, error: "Invalid affiliate status." };
+  const result = await applyAffiliateStatus(context, affiliateId, status, reason);
+  revalidatePath("/dashboard/affiliate");
+  return result;
+}
+
+/** Approves or rejects several pending applications at once. */
+export async function bulkSetAffiliateStatusAction(
+  affiliateIds: string[],
+  status: AffiliateStatus
+): Promise<ActionResult<{ updated: number; skipped: number }>> {
+  const context = await requireAffiliateWorkspace("affiliate.manage");
+  if (!context) return { ok: false, error: "Not allowed." };
+  if (!isAffiliateStatus(status)) return { ok: false, error: "Invalid affiliate status." };
+  const ids = Array.from(new Set(Array.isArray(affiliateIds) ? affiliateIds : []))
+    .filter((id): id is string => typeof id === "string" && id.length > 0)
+    .slice(0, 100);
+  if (!ids.length) return { ok: false, error: "Select at least one affiliate." };
+  let updated = 0;
+  for (const id of ids) {
+    const result = await applyAffiliateStatus(context, id, status);
+    if (result.ok) updated += 1;
+  }
+  revalidatePath("/dashboard/affiliate");
+  return { ok: true, data: { updated, skipped: ids.length - updated } };
 }
 
 export async function setCommissionStatusAction(
@@ -334,12 +441,15 @@ export async function createAffiliatePayoutAction(affiliateId: string): Promise<
   const context = await requireAffiliateWorkspace("affiliate.payout");
   if (!context) return { ok: false, error: "Not allowed." };
   const affiliate = await prisma.affiliate.findFirst({
-    where: { id: affiliateId, workspaceId: context.workspace.id, status: { in: ["ACTIVE", "SUSPENDED"] } },
+    where: { id: affiliateId, workspaceId: context.workspace.id },
     include: { program: { select: { minimumPayout: true } } },
   });
   if (!affiliate) return { ok: false, error: "Affiliate not found." };
+  if (affiliate.status !== "ACTIVE" && affiliate.status !== "SUSPENDED") {
+    return { ok: false, error: `This affiliate is ${affiliate.status.toLowerCase()}. Only active or suspended affiliates can be paid out.` };
+  }
   const commissions = await prisma.commission.findMany({
-    where: { affiliateId, workspaceId: context.workspace.id, status: "APPROVED", payoutItem: null },
+    where: { affiliateId, workspaceId: context.workspace.id, ...UNBATCHED_COMMISSION },
     orderBy: { createdAt: "asc" },
   });
   const adjustments = await prisma.commissionAdjustment.findMany({
@@ -361,6 +471,14 @@ export async function createAffiliatePayoutAction(affiliateId: string): Promise<
     return { ok: false, error: `Approved balance has not reached the minimum payout of Rp${affiliate.program.minimumPayout.toLocaleString("id-ID")}.` };
   }
   const payout = await prisma.$transaction(async (tx) => {
+    // Items left by a failed or cancelled batch block re-batching (one item
+    // per commission); that batch keeps its amount, reference, and notes.
+    await tx.affiliatePayoutItem.deleteMany({
+      where: {
+        commissionId: { in: commissions.map((item) => item.id) },
+        payout: { status: { in: ["FAILED", "CANCELLED"] } },
+      },
+    });
     const created = await tx.affiliatePayout.create({
       data: {
         workspaceId: context.workspace.id,
@@ -402,8 +520,10 @@ export async function updateAffiliatePayoutAction(payoutId: string, formData: Fo
   if (!(["PROCESSING", "PAID", "FAILED", "CANCELLED"] as const).includes(status as never)) {
     return { ok: false, error: "Invalid payout status." };
   }
-  if (payout.status === "PAID" || payout.status === "CANCELLED") {
-    return { ok: false, error: "This payout is final and cannot be changed." };
+  // FAILED is final too: its commissions were released back to the approved
+  // balance, so settling it later would pay money the ledger doesn't track.
+  if (payout.status === "PAID" || payout.status === "CANCELLED" || payout.status === "FAILED") {
+    return { ok: false, error: "This payout is final and cannot be changed. Create a new payout instead." };
   }
   const reference = String(formData.get("reference") ?? "").trim().slice(0, 200);
   if (status === "PAID" && !reference) return { ok: false, error: "Payment reference is required." };

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { sendQueuedChannelMessage } from "@/lib/integrations/inbox/channels";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceWhatsAppConfig, sendWhatsAppText } from "@/lib/whatsapp/send";
 
@@ -22,7 +23,7 @@ export async function sendQueuedInboxWhatsAppMessage(messageId: string): Promise
       status: true,
       direction: true,
       body: true,
-      conversation: { select: { contactPhone: true } },
+      conversation: { select: { contactPhone: true, channel: true } },
     },
   });
 
@@ -30,6 +31,9 @@ export async function sendQueuedInboxWhatsAppMessage(messageId: string): Promise
   if (message.direction !== "OUTBOUND") return "not an outbound message";
   // SENT or FAILED means it was already resolved; never send twice.
   if (message.status !== "QUEUED") return `already ${message.status}`;
+
+  // Telegram, Messenger and Instagram replies share this job.
+  if (message.conversation.channel !== "WHATSAPP") return sendQueuedChannelMessage(message);
 
   const config = await getWorkspaceWhatsAppConfig(message.workspaceId);
   if (!config) {

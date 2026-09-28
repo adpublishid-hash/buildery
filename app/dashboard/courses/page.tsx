@@ -6,7 +6,6 @@ import {
   FileText,
   GraduationCap,
   Plus,
-  Settings2,
   Users,
 } from "lucide-react";
 import type { CourseStatus } from "@prisma/client";
@@ -14,7 +13,9 @@ import type { CourseStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { canInWorkspace } from "@/lib/permissions";
 import { requireCurrentWorkspace } from "@/lib/workspace";
+import { countSubmissionsToGrade } from "@/lib/lms-overview";
 import { formatPrice } from "@/lib/store";
+import { LmsNav } from "@/components/courses/lms-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -81,35 +82,37 @@ export default async function CoursesPage({
   };
 
   const page = parsePage(searchParams?.page);
-  const matchingCourses = await prisma.course.count({ where });
-  const courses = await prisma.course.findMany({
-    where,
-    skip: (page - 1) * PAGE_SIZE,
-    take: PAGE_SIZE,
-    include: {
-      _count: { select: { modules: true, enrollments: true } },
-      modules: {
-        select: { _count: { select: { lessons: true } } },
+  const [matchingCourses, courses, stats, statusCounts, enrollmentCount, lessonCount, toGrade] = await Promise.all([
+    prisma.course.count({ where }),
+    prisma.course.findMany({
+      where,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      include: {
+        _count: { select: { modules: true, enrollments: true } },
+        modules: {
+          select: { _count: { select: { lessons: true } } },
+        },
       },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
-
-  const stats = await prisma.course.aggregate({
-    where: { workspaceId: workspace.id },
-    _count: { _all: true },
-  });
-  const statusCounts = await prisma.course.groupBy({
-    by: ["status"],
-    where: { workspaceId: workspace.id },
-    _count: { _all: true },
-  });
-  const enrollmentCount = await prisma.enrollment.count({
-    where: { course: { workspaceId: workspace.id } },
-  });
-  const lessonCount = await prisma.courseLesson.count({
-    where: { module: { course: { workspaceId: workspace.id } } },
-  });
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.course.aggregate({
+      where: { workspaceId: workspace.id },
+      _count: { _all: true },
+    }),
+    prisma.course.groupBy({
+      by: ["status"],
+      where: { workspaceId: workspace.id },
+      _count: { _all: true },
+    }),
+    prisma.enrollment.count({
+      where: { course: { workspaceId: workspace.id } },
+    }),
+    prisma.courseLesson.count({
+      where: { module: { course: { workspaceId: workspace.id } } },
+    }),
+    countSubmissionsToGrade(workspace.id),
+  ]);
   const statusMap = new Map(
     statusCounts.map((item) => [item.status, item._count._all])
   );
@@ -123,11 +126,6 @@ export default async function CoursesPage({
         action={
           canEdit ? (
             <div className="flex items-center gap-2">
-              <Button variant="outline" asChild>
-                <Link href="/dashboard/courses/settings">
-                  <Settings2 /> Halaman katalog
-                </Link>
-              </Button>
               <Button asChild>
                 <Link href="/dashboard/courses/new">
                   <Plus /> New course
@@ -137,6 +135,8 @@ export default async function CoursesPage({
           ) : undefined
         }
       />
+
+      <LmsNav toGrade={toGrade} />
 
       <div className="mb-5 grid gap-3 md:grid-cols-4">
         <CourseMetric

@@ -71,6 +71,8 @@ export type IntegrationFormValues = {
   whatsappApiKey: string;
   whatsappSenderNumber: string;
   whatsappPhoneNumberId: string;
+  whatsappApiBaseUrl: string;
+  whatsappUserCode: string;
   whatsappWebhookVerifyToken: string;
   whatsappWebhookSecret: string;
   whatsappIsActive: boolean;
@@ -133,6 +135,8 @@ const FIELD_TAB: Record<keyof IntegrationFormValues, IntegrationTab> = {
   whatsappApiKey: "whatsapp",
   whatsappSenderNumber: "whatsapp",
   whatsappPhoneNumberId: "whatsapp",
+  whatsappApiBaseUrl: "whatsapp",
+  whatsappUserCode: "whatsapp",
   whatsappWebhookVerifyToken: "whatsapp",
   whatsappWebhookSecret: "whatsapp",
   whatsappIsActive: "whatsapp",
@@ -173,7 +177,14 @@ export function IntegrationsForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
-  const [tab, setTab] = useState<IntegrationTab>("ringkasan");
+  // The integrations catalog links here with ?section=<tab> to open one panel.
+  const sectionParam = searchParams?.get("section");
+  const [tab, setTab] = useState<IntegrationTab>(() =>
+    INTEGRATION_TABS.some((item) => item.key === sectionParam) ? (sectionParam as IntegrationTab) : "ringkasan"
+  );
+  useEffect(() => {
+    if (INTEGRATION_TABS.some((item) => item.key === sectionParam)) setTab(sectionParam as IntegrationTab);
+  }, [sectionParam]);
   const [serverError, setServerError] = useState<string | null>(null);
   const [whatsappIsActive, setWhatsappIsActive] = useState(
     defaultValues.whatsappIsActive
@@ -247,6 +258,7 @@ export function IntegrationsForm({
     formState: { errors, isDirty },
   } = useForm<IntegrationFormValues>({ defaultValues });
   const watched = watch();
+  const waHints = whatsappProviderHints(watched.whatsappProvider);
   const gmailOAuthClientSaved = Boolean(
     defaultValues.gmailClientId.trim() && secretHints.gmailClientSecret
   );
@@ -1344,7 +1356,7 @@ export function IntegrationsForm({
               WhatsApp Inbox
             </h3>
             <p className="mt-1 text-xs leading-5 text-zinc-500">
-              Hubungkan OneSender, WhatsApp Business API, atau StarSender agar
+              Hubungkan WhatsApp Cloud API, WAHA, Woowa, Kirimi, StarSender, atau OneSender agar
               pesan masuk tampil di Inbox dan balasan bisa dikirim dari dashboard.
             </p>
           </div>
@@ -1370,9 +1382,12 @@ export function IntegrationsForm({
               {...register("whatsappProvider")}
             >
               <option value="">Pilih provider</option>
-              <option value="ONESENDER">OneSender</option>
-              <option value="WABA">WhatsApp Business API</option>
+              <option value="WABA">WhatsApp Cloud API (Meta)</option>
+              <option value="WAHA">WAHA (self-hosted)</option>
+              <option value="WOOWA">Woowa</option>
+              <option value="KIRIMI">Kirimi</option>
               <option value="STARSENDER">StarSender</option>
+              <option value="ONESENDER">OneSender</option>
             </select>
           </div>
           <div className="space-y-2">
@@ -1396,16 +1411,44 @@ export function IntegrationsForm({
             {storedSecretControl("whatsappApiKey")}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="whatsappPhoneNumberId">
-              Phone Number ID / Device ID
-            </Label>
+            <Label htmlFor="whatsappPhoneNumberId">{waHints.idLabel}</Label>
             <Input
               id="whatsappPhoneNumberId"
-              placeholder="Untuk WABA atau device provider"
+              placeholder={waHints.idPlaceholder}
               disabled={!canEdit}
               {...register("whatsappPhoneNumberId")}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="whatsappApiBaseUrl">
+              {waHints.baseUrlRequired ? "URL API" : "URL API (opsional)"}
+            </Label>
+            <Input
+              id="whatsappApiBaseUrl"
+              placeholder={waHints.baseUrlPlaceholder}
+              disabled={!canEdit}
+              {...register("whatsappApiBaseUrl")}
+            />
+            {errors.whatsappApiBaseUrl?.message ? (
+              <p className="text-xs text-red-600">{errors.whatsappApiBaseUrl.message}</p>
+            ) : null}
+          </div>
+          {watched.whatsappProvider === "KIRIMI" ? (
+            <div className="space-y-2">
+              <Label htmlFor="whatsappUserCode">User Code Kirimi</Label>
+              <Input
+                id="whatsappUserCode"
+                placeholder="Kode akun dari dashboard Kirimi"
+                disabled={!canEdit}
+                {...register("whatsappUserCode")}
+              />
+            </div>
+          ) : null}
+          {waHints.note ? (
+            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-[11px] leading-5 text-zinc-500 md:col-span-2 dark:bg-zinc-900">
+              {waHints.note}
+            </p>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="whatsappWebhookVerifyToken">
               Webhook Verify Token
@@ -1595,4 +1638,66 @@ function MetaCapiMetric({
       </div>
     </div>
   );
+}
+
+/** Field labels and setup notes that differ per WhatsApp provider. */
+function whatsappProviderHints(provider: string) {
+  switch (provider) {
+    case "WABA":
+      return {
+        idLabel: "Phone Number ID",
+        idPlaceholder: "ID nomor dari Meta Business Manager",
+        baseUrlRequired: false,
+        baseUrlPlaceholder: "https://graph.facebook.com",
+        note: "API key = access token permanen (System User). Webhook Secret = App Secret aplikasi Meta.",
+      };
+    case "WAHA":
+      return {
+        idLabel: "Nama Session",
+        idPlaceholder: "default",
+        baseUrlRequired: true,
+        baseUrlPlaceholder: "https://waha.tokoanda.com",
+        note: "API key = WAHA_API_KEY server Anda. Untuk pesan masuk, set webhook session ke URL di bawah dengan event \"message\" dan isi hmac.key sama dengan Webhook Secret.",
+      };
+    case "WOOWA":
+      return {
+        idLabel: "Device ID (opsional)",
+        idPlaceholder: "Tidak dipakai Woowa",
+        baseUrlRequired: false,
+        baseUrlPlaceholder: "https://notifapi.com",
+        note: "API key = key dari dashboard Woowa. Isi URL API bila akun Anda memakai server/IP khusus.",
+      };
+    case "KIRIMI":
+      return {
+        idLabel: "Device ID",
+        idPlaceholder: "ID device dari dashboard Kirimi",
+        baseUrlRequired: false,
+        baseUrlPlaceholder: "https://api.kirimi.id",
+        note: "API key = secret akun Kirimi. Pesan dibatasi 1.200 karakter.",
+      };
+    case "ONESENDER":
+      return {
+        idLabel: "Device ID (opsional)",
+        idPlaceholder: "Tidak wajib",
+        baseUrlRequired: true,
+        baseUrlPlaceholder: "https://onesender.tokoanda.com",
+        note: "",
+      };
+    case "STARSENDER":
+      return {
+        idLabel: "Device ID (opsional)",
+        idPlaceholder: "Tidak wajib",
+        baseUrlRequired: false,
+        baseUrlPlaceholder: "https://api.starsender.online",
+        note: "",
+      };
+    default:
+      return {
+        idLabel: "Phone Number ID / Device ID",
+        idPlaceholder: "Untuk WABA atau device provider",
+        baseUrlRequired: false,
+        baseUrlPlaceholder: "https://…",
+        note: "",
+      };
+  }
 }

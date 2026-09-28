@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
 import { canInWorkspace } from "@/lib/permissions";
@@ -13,35 +11,32 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { LmsNav } from "@/components/courses/lms-nav";
+import { countSubmissionsToGrade } from "@/lib/lms-overview";
 import { CourseCatalogSettingsForm } from "@/components/courses/course-catalog-settings-form";
 import { createCourseCategoryAction } from "@/lib/actions/lms-admin";
 import { Input } from "@/components/ui/input";
 import { StorefrontSettingsCards } from "@/components/storefront/storefront-settings-cards";
 
-export const metadata = { title: "Halaman kursus · My Landing" };
+export const metadata = { title: "Course catalog page · My Landing" };
 
 export default async function CourseCatalogSettingsPage() {
   const { workspace, role } = await requireCurrentWorkspace();
   const canEdit = canInWorkspace(role, "content.edit");
 
-  const [setting, categories] = await Promise.all([
+  const [setting, categories, toGrade] = await Promise.all([
     prisma.lmsSetting.findUnique({ where: { workspaceId: workspace.id } }),
     prisma.courseCategory.findMany({ where: { workspaceId: workspace.id }, orderBy: { name: "asc" } }),
+    countSubmissionsToGrade(workspace.id),
   ]);
 
   return (
     <div className="w-full min-w-0 space-y-6">
       <PageHeader
-        title="Halaman kursus"
-        description="Atur teks halaman katalog dan detail kursus publik."
-        action={
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/courses">
-              <ArrowLeft /> Kursus
-            </Link>
-          </Button>
-        }
+        title="Courses"
+        description="Text on your public course catalog and course pages, plus course categories."
       />
+      <LmsNav toGrade={toGrade} />
 
       <Card>
         <CardHeader>

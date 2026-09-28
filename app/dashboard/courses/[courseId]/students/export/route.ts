@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { canInWorkspace } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getCurrentWorkspace } from "@/lib/workspace";
+import { csvCell } from "@/lib/csv";
 
 export async function GET(_: Request, { params }: { params: { courseId: string } }) {
   const session = await auth();
@@ -19,5 +20,3 @@ export async function GET(_: Request, { params }: { params: { courseId: string }
   ].map((row) => row.map(csvCell).join(",")).join("\n");
   return new NextResponse(csv, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${course.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-students.csv"` } });
 }
-
-function csvCell(value: unknown) { const text = String(value ?? ""); return `"${text.replace(/"/g, '""')}"`; }

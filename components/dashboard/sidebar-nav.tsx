@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { Role } from "@prisma/client";
-import { ChevronUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { can } from "@/lib/permissions";
@@ -12,6 +12,9 @@ import { can } from "@/lib/permissions";
 import { CountPill, InboxNavBadge } from "./inbox-nav-badge";
 import { dashboardNav } from "./nav-config";
 import type { NavItem, NavSection } from "./nav-config";
+import { locateInNav, type NavLocation } from "./nav-locate";
+
+export { locateInNav, type NavLocation };
 
 export function SidebarNav({
   role,
@@ -23,44 +26,72 @@ export function SidebarNav({
 }) {
   const pathname = usePathname() ?? "";
   const search = useSearchParams();
-  const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
   // One answer for "where am I" shared with the header breadcrumb, so the two
-  // never disagree (eCommerce's settings shortcut vs. Pengaturan itself).
+  // never disagree (eCommerce's settings shortcut vs. Settings itself).
   const here = locateInNav(pathname, search);
+  const hereGroup = here?.item.children?.length ? here.item.href : null;
+
+  // Accordion: one group open at a time, following the page you're on. The
+  // user can still open another group to peek, or close the current one.
+  const [openGroup, setOpenGroup] = useState<string | null>(hereGroup);
+  useEffect(() => {
+    if (hereGroup) setOpenGroup(hereGroup);
+  }, [hereGroup]);
 
   const visibleSections = useMemo(() => visibleNav(role), [role]);
   const top = visibleSections.filter((section) => !section.bottom);
   const bottom = visibleSections.filter((section) => section.bottom);
 
   const renderSection = (section: NavSection) => (
-    <div key={section.label} className="flex w-full flex-col gap-[6px]">
-      <p className="whitespace-nowrap px-[2px] text-[11px] uppercase leading-[1.6] tracking-[0.02em] text-kv-muted-fg">
-        {section.label}
-      </p>
-      <div className={cn("flex w-full flex-col", !section.bottom && "gap-[2px]")}>
-        {section.items.map((item) => (
-          <NavRow
-            key={item.href}
-            item={item}
-            here={here}
-            muted={section.bottom}
-            open={manualOpen[item.href]}
-            onToggle={(next) =>
-              setManualOpen((curr) => ({ ...curr, [item.href]: next }))
-            }
-            badges={badges}
-          />
-        ))}
-      </div>
+    <div
+      key={section.label}
+      role="group"
+      aria-label={section.label}
+      className="flex w-full flex-col gap-[2px]"
+    >
+      {section.items.map((item) => (
+        <NavRow
+          key={item.href}
+          item={item}
+          here={here}
+          muted={section.bottom}
+          open={openGroup === item.href}
+          onToggle={(next) => setOpenGroup(next ? item.href : null)}
+          badges={badges}
+        />
+      ))}
     </div>
   );
 
   return (
-    <nav className="kv-no-scrollbar flex min-h-0 w-full flex-1 flex-col justify-between gap-[14px] overflow-y-auto overflow-x-hidden">
-      <div className="flex w-full flex-col gap-[14px]">{top.map(renderSection)}</div>
-      {bottom.map(renderSection)}
+    <nav
+      aria-label="Dashboard"
+      className="kv-no-scrollbar flex min-h-0 w-full flex-1 flex-col justify-between gap-[14px] overflow-y-auto overflow-x-hidden"
+    >
+      <div className="flex w-full flex-col">
+        {top.map((section, index) => (
+          <div key={section.label} className="flex w-full flex-col">
+            {index > 0 ? <NavDivider /> : null}
+            {renderSection(section)}
+          </div>
+        ))}
+      </div>
+      {bottom.length ? (
+        <div className="flex w-full flex-col">
+          {bottom.map((section, index) => (
+            <div key={section.label} className="flex w-full flex-col">
+              {index > 0 ? <NavDivider /> : null}
+              {renderSection(section)}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </nav>
   );
+}
+
+function NavDivider() {
+  return <div aria-hidden className="mx-[8px] my-[8px] h-px shrink-0 bg-black/[0.07]" />;
 }
 
 function visibleNav(role: Role): NavSection[] {
@@ -85,14 +116,14 @@ function NavRow({
   item,
   here,
   muted,
-  open: manual,
+  open,
   onToggle,
   badges,
 }: {
   item: NavItem;
   here: NavLocation | null;
   muted?: boolean;
-  open?: boolean;
+  open: boolean;
   onToggle: (next: boolean) => void;
   badges?: Record<string, number>;
 }) {
@@ -100,8 +131,11 @@ function NavRow({
   const hasChildren = Boolean(item.children?.length);
   const mine = here?.item.href === item.href;
   const activeChild = hasChildren && mine && here?.child ? here.child.href : null;
-  const open = manual ?? activeChild !== null;
   const idleText = muted ? "text-kv-muted-fg" : "text-kv-secondary-fg";
+  // A closed group rolls up its children's counts so nothing waiting is hidden.
+  const groupCount = hasChildren
+    ? item.children!.reduce((sum, child) => sum + (badges?.[child.href] ?? 0), 0)
+    : 0;
 
   const label = (
     <span className="flex min-w-0 items-center gap-[10px]">
@@ -132,16 +166,27 @@ function NavRow({
         type="button"
         onClick={() => onToggle(!open)}
         aria-expanded={open}
-        className={cn(ROW, ROW_IDLE, activeChild ? "text-kv-fg" : idleText)}
+        className={cn(
+          ROW,
+          // Closed over the current page: keep the "you are here" cue visible.
+          activeChild && !open ? ROW_ACTIVE : ROW_IDLE,
+          activeChild ? "font-medium text-kv-fg" : idleText
+        )}
       >
         {label}
-        <span
-          className={cn(
-            "flex transition-transform duration-300 ease-out-expo",
-            !open && "rotate-180"
-          )}
-        >
-          <ChevronUp className="h-[12px] w-[12px]" strokeWidth={2} />
+        <span className="flex items-center gap-[6px]">
+          {!open && groupCount > 0 ? <CountPill count={groupCount} /> : null}
+          {!open && activeChild ? (
+            <span aria-hidden className="h-[5px] w-[5px] rounded-full bg-kv-fg" />
+          ) : null}
+          <span
+            className={cn(
+              "flex transition-transform duration-300 ease-out-expo",
+              open && "rotate-90"
+            )}
+          >
+            <ChevronRight className="h-[13px] w-[13px]" strokeWidth={2} />
+          </span>
         </span>
       </button>
       <div
@@ -169,6 +214,11 @@ function NavRow({
                     )}
                   >
                     <span className="truncate">{child.label}</span>
+                    {badges?.[child.href] ? (
+                      <span className="ml-auto pr-[6px]">
+                        <CountPill count={badges[child.href]} />
+                      </span>
+                    ) : null}
                   </span>
                   <svg
                     aria-hidden
@@ -210,63 +260,6 @@ function filterItem(item: NavItem, role: Role): NavItem | null {
 
   if (!allowed && (!children || children.length === 0)) return null;
   return { ...item, children };
-}
-
-export type NavLocation = { item: NavItem; child: NavItem | null };
-
-/** Minimal read-only view of URLSearchParams, as returned by useSearchParams. */
-type SearchLike = { get(name: string): string | null } | null;
-
-/**
- * How well a menu href describes the current URL, or -1 when it does not.
- *
- * Paths match exactly or as a prefix (a record under a list page). A query in
- * the href (`/dashboard/settings?tab=ecommerce`) must agree with the URL for
- * every key the URL actually sets; agreeing earns a bonus, so the settings
- * page opened on the eCommerce tab lights up eCommerce's shortcut, not the
- * general "Workspace" tab.
- */
-function matchScore(href: string, pathname: string, search: SearchLike) {
-  const [path, query] = href.split("?");
-  const pathHit =
-    pathname === path || (path !== "/dashboard" && pathname.startsWith(`${path}/`));
-  if (!pathHit) return -1;
-  let score = path.length * 4;
-  if (query) {
-    for (const [key, value] of new URLSearchParams(query)) {
-      const actual = search?.get(key);
-      if (actual == null) continue;
-      if (actual !== value) return -1;
-      score += 2;
-    }
-  }
-  return score;
-}
-
-/**
- * Where the current page sits in the menu: the top-level entry and, when the
- * page belongs to one of its children, that child. On a tie, an entry whose
- * own top-level item also matches wins, so /dashboard/settings is
- * "Pengaturan", not eCommerce's shortcut to it.
- */
-export function locateInNav(pathname: string, search: SearchLike = null): NavLocation | null {
-  let best: (NavLocation & { score: number }) | null = null;
-  for (const section of dashboardNav) {
-    for (const item of section.items) {
-      const own = matchScore(item.href, pathname, search) >= 0 ? 1 : 0;
-      for (const child of item.children ?? []) {
-        const hit = matchScore(child.href, pathname, search);
-        if (hit < 0) continue;
-        const score = hit + own;
-        if (!best || score > best.score) best = { item, child, score };
-      }
-      if (own) {
-        const score = matchScore(item.href, pathname, search) + 1;
-        if (!best || score > best.score) best = { item, child: null, score };
-      }
-    }
-  }
-  return best ? { item: best.item, child: best.child } : null;
 }
 
 const INBOX_HREF = "/dashboard/inbox";

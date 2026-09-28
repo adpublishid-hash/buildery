@@ -33,6 +33,7 @@ import {
   deleteManyFormSubmissionUploads,
   PRIVATE_FORM_UPLOAD_ROOT,
 } from "@/lib/form-upload";
+import { syncNewsletterContact } from "@/lib/integrations/email/send";
 import { reportError } from "@/lib/error-reporting";
 import {
   getFormAvailability,
@@ -549,6 +550,7 @@ export async function submitFormAction(
     },
   };
   const jar = cookies();
+  const leadCustomer = extractLeadCustomerData(publishedFields, payload);
   sendWorkspaceAdEvent(form.workspaceId, {
     eventName: leadMetaEvent.eventName,
     eventId: leadMetaEvent.eventId,
@@ -568,10 +570,18 @@ export async function submitFormAction(
     visitorId: jar.get(VISITOR_COOKIE)?.value ?? null,
     adConsent: readConsent(jar.get(CONSENT_COOKIE)?.value),
     customData: leadMetaEvent.customData,
-    customerData: extractLeadCustomerData(publishedFields, payload),
+    customerData: leadCustomer,
   }).catch((error) => {
     console.warn("Ad event Lead failed", error);
   });
+
+  // Newsletter lists on connected email providers (Brevo, Listmonk).
+  if (leadCustomer.email) {
+    void syncNewsletterContact(form.workspaceId, {
+      email: leadCustomer.email,
+      name: [leadCustomer.firstName, leadCustomer.lastName].filter(Boolean).join(" ") || null,
+    });
+  }
 
   return {
     ok: true,

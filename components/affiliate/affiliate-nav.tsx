@@ -1,38 +1,45 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Banknote, Coins, Link2, Percent, Settings2, Users } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { TabBar } from "@/components/ui/tab-bar";
 
 const items = [
-  { href: "/dashboard/affiliate", label: "Affiliates" },
-  { href: "/dashboard/affiliate/commissions", label: "Commissions" },
-  { href: "/dashboard/affiliate/payouts", label: "Payouts" },
-  { href: "/dashboard/affiliate/program", label: "Program" },
+  { key: "affiliates", href: "/dashboard/affiliate", label: "Partners", icon: Users },
+  { key: "referrals", href: "/dashboard/affiliate/referrals", label: "Referrals", icon: Link2 },
+  { key: "commissions", href: "/dashboard/affiliate/commissions", label: "Commissions", icon: Coins },
+  { key: "payouts", href: "/dashboard/affiliate/payouts", label: "Payouts", icon: Banknote },
+  { key: "rates", href: "/dashboard/affiliate/rates", label: "Rates", icon: Percent },
+  { key: "program", href: "/dashboard/affiliate/program", label: "Program", icon: Settings2 },
 ];
 
-export function AffiliateNav() {
+export function AffiliateNav({
+  pendingAffiliates = 0,
+  pendingCommissions = 0,
+  eligiblePayouts = 0,
+}: {
+  /** Applications waiting for review, shown on the Affiliates tab. */
+  pendingAffiliates?: number;
+  pendingCommissions?: number;
+  eligiblePayouts?: number;
+}) {
   const pathname = usePathname() ?? "";
+  const active =
+    items.find((item) => item.key !== "affiliates" && pathname.startsWith(item.href))?.key ??
+    "affiliates";
+  const counts: Record<string, number> = {
+    affiliates: pendingAffiliates,
+    commissions: pendingCommissions,
+    payouts: eligiblePayouts,
+  };
+
   return (
-    <div className="mb-6 flex max-w-full gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-white p-1">
-      {items.map((item) => {
-        const active = pathname === item.href;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "shrink-0 rounded-md px-3 py-1 text-sm transition-colors",
-              active
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-600 hover:text-zinc-900"
-            )}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-    </div>
+    <TabBar
+      ariaLabel="Affiliate sections"
+      active={active}
+      className="mb-[16px]"
+      items={items.map((item) => ({ ...item, count: counts[item.key] }))}
+    />
   );
 }

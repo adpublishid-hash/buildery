@@ -3,6 +3,8 @@ import "server-only";
 import { sendGmailOAuthEmail } from "@/lib/gmail-oauth";
 import { sendMailketingEmail } from "@/lib/mailketing";
 import { prisma } from "@/lib/prisma";
+import { getActiveConnection } from "@/lib/integrations/connections";
+import { sendEmailWithConnection } from "@/lib/integrations/email/send";
 
 export type EmailMessage = {
   workspaceId?: string | null;
@@ -14,12 +16,15 @@ export type EmailMessage = {
 };
 
 export type EmailResult =
-  | { ok: true; provider: "mailketing" | "gmail" | "resend" | "console" }
+  | { ok: true; provider: string }
   | { ok: false; error: string };
 
 /**
  * Sends workspace-owned transactional email to buyers/operators.
- * Workspace providers win in this order: Mailketing API, Gmail OAuth2.
+ * Workspace providers win in this order: the connected email integration
+ * (Resend, Brevo, SES, Kirim.Email, Listmonk), then Mailketing API, then
+ * Gmail OAuth2. When the connected provider fails and a legacy one is set up,
+ * the legacy one is tried so the email still goes out.
  *
  * Platform/admin-to-user email must use sendAppEmail() instead, so the
  * platform SMTP credential is never used for a seller's buyer emails.
@@ -28,6 +33,23 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
   const workspaceEmail = message.workspaceId
     ? await getWorkspaceEmailConfig(message.workspaceId)
     : null;
+
+  let connectedError: string | null = null;
+  if (message.workspaceId) {
+    const connection = await getActiveConnection(message.workspaceId, "EMAIL").catch(() => null);
+    if (connection) {
+      try {
+        await sendEmailWithConnection(connection, message);
+        return { ok: true, provider: connection.provider.id };
+      } catch (error) {
+        connectedError = `${connection.provider.name}: ${error instanceof Error ? error.message : "send failed"}`;
+        if (!workspaceEmail?.mailketing && !workspaceEmail?.gmail) {
+          return { ok: false, error: connectedError };
+        }
+        console.warn("[email] %s; falling back to legacy provider", connectedError);
+      }
+    }
+  }
 
   if (workspaceEmail?.mailketing) {
     try {

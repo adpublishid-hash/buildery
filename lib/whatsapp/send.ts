@@ -35,6 +35,7 @@ export async function getWorkspaceWhatsAppConfig(
       whatsappPhoneNumberId: true,
       whatsappApiBaseUrl: true,
       whatsappGraphVersion: true,
+      whatsappUserCode: true,
     },
   });
 
@@ -48,6 +49,7 @@ export async function getWorkspaceWhatsAppConfig(
     phoneNumberId: integration.whatsappPhoneNumberId ?? "",
     apiBaseUrl: integration.whatsappApiBaseUrl ?? "",
     graphVersion: integration.whatsappGraphVersion ?? "v25.0",
+    userCode: integration.whatsappUserCode ?? "",
   };
 }
 

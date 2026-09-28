@@ -159,6 +159,12 @@ SHIPPING_WEBHOOK_SECRET="<openssl rand -hex 32>"
 For live payments also fill the `MIDTRANS_*` keys and set
 `MIDTRANS_NOTIFICATION_URL="https://buildery.example.com/api/payments/midtrans/webhook"`.
 
+Integrations connected from the catalog (Settings → Integrations) each get
+their own webhook URL, `https://<domain>/api/integrations/webhooks/<provider>/<key>`,
+shown in the integration's panel. Set `INTEGRATION_SECRET_KEY` (see
+`.env.example`) before connecting any, and keep it stable: it encrypts their
+stored credentials.
+
 Shipping providers can push tracking updates to `POST /api/webhooks/shipping`
 with `Authorization: Bearer <SHIPPING_WEBHOOK_SECRET>`. The JSON payload accepts
 `workspaceSlug`, `orderNumber`, `status`, `carrier`, `trackingNumber`,
@@ -491,6 +497,9 @@ Then on the server:
 - [ ] `JOBS_RUNNER_SECRET` is set, and `pm2 status` shows `buildery-jobs`
       online
 - [ ] Midtrans webhook points at `https://<domain>/api/payments/midtrans/webhook`
+- [ ] Each catalog integration in use shows "Connected and verified", and its
+      webhook URL (payments, Telegram, Messenger, Instagram) is registered in
+      the provider's dashboard over HTTPS
 - [ ] Meta Pixel ID and access token saved per workspace (Settings →
       Integrations) for every store that uses CAPI
 - [ ] `/dashboard/system/jobs` shows 0 problem jobs a few minutes after the

@@ -10,6 +10,8 @@ import type { MetaCustomData } from "@/lib/meta-capi";
 import { readStoredAdContext, sendWorkspaceAdEvent } from "@/lib/ad-events";
 import { splitName } from "@/lib/ad-match";
 import { catalogItemId, DEFAULT_AD_CURRENCY } from "@/lib/ad-catalog";
+import { blendedRateBps, percentToBps } from "@/lib/affiliate-rates";
+import { syncNewsletterContact } from "@/lib/integrations/email/send";
 import { publicSiteHref } from "@/lib/public-url";
 import {
   queueCourseEmailNotification,
@@ -25,6 +27,7 @@ import { expandBundleLines } from "@/lib/product-bundles";
 import { activateMembership } from "@/lib/membership-lifecycle";
 import {
   createAffiliateCommission,
+  recurringReferrerForMembership,
   orderCommissionBasis,
 } from "@/lib/affiliate-commissions";
 
@@ -131,7 +134,26 @@ export async function applyPaymentStatus(
     { isolationLevel: "Serializable" }
   );
   for (const effect of result.afterCommit) effect();
+  if (result.changed && newStatus === "PAID") {
+    void syncBuyerToNewsletter(paymentId).catch((error) => console.warn("Newsletter sync after payment failed", error));
+  }
   return { changed: result.changed, payment: result.payment };
+}
+
+/** Adds a paying customer to connected newsletter lists (Brevo, Listmonk). */
+async function syncBuyerToNewsletter(paymentId: string) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: {
+      workspaceId: true,
+      order: { select: { customer: { select: { email: true, name: true } } } },
+      enrollment: { select: { customer: { select: { email: true, name: true } } } },
+      customerMembership: { select: { customer: { select: { email: true, name: true } } } },
+    },
+  });
+  const customer = payment?.order?.customer ?? payment?.enrollment?.customer ?? payment?.customerMembership?.customer;
+  if (!payment || !customer) return;
+  await syncNewsletterContact(payment.workspaceId, customer);
 }
 
 /**
@@ -453,6 +475,7 @@ async function fulfillOrder(
             includeShipping: true,
             includeTax: true,
             includeFees: true,
+            commissionPercent: true,
           },
         },
       },
@@ -468,6 +491,13 @@ async function fulfillOrder(
         purchaserCustomerId: order.customerId,
         purchaserEmail: order.customer?.email ?? order.customerEmailSnapshot,
         orderId: order.id,
+        itemRateBps: blendedRateBps(
+          order.items.map((item) => ({
+            amount: item.unitPrice * item.quantity,
+            percent: item.product?.affiliateCommissionPercent,
+          })),
+          affiliate.program.commissionPercent
+        ),
       });
     }
   }
@@ -548,6 +578,7 @@ async function fulfillEnrollmentPayment(tx: TransactionClient, payment: {
           requiredLevel: true,
           isFree: true,
           price: true,
+          affiliateCommissionPercent: true,
         },
       },
     },
@@ -585,6 +616,7 @@ async function fulfillEnrollmentPayment(tx: TransactionClient, payment: {
     basisAmount: payment.amount,
     purchaserCustomerId: enrollment.customerId,
     purchaserEmail: enrollment.customer.email,
+    itemRateBps: percentToBps(enrollment.course.affiliateCommissionPercent),
   });
 
   return [() => {
@@ -642,7 +674,7 @@ async function fulfillMembershipPayment(tx: TransactionClient, payment: {
     include: {
       workspace: { select: { slug: true } },
       customer: true,
-      plan: { select: { id: true, name: true, level: true, price: true } },
+      plan: { select: { id: true, name: true, level: true, price: true, affiliateCommissionPercent: true } },
     },
   });
   const sourceUrl = publicSiteHref(membership.workspace.slug, "memberships");
@@ -659,12 +691,24 @@ async function fulfillMembershipPayment(tx: TransactionClient, payment: {
     status: "active",
   };
 
+  // A renewal without a fresh referral click can still pay the partner who
+  // brought the member in, when the program pays recurring commissions.
+  const affiliateId =
+    payment.referralAffiliateId ??
+    (payment.membershipRenewal
+      ? await recurringReferrerForMembership(tx, {
+          workspaceId: membership.workspaceId,
+          customerMembershipId: membership.id,
+          excludePaymentId: payment.id,
+        })
+      : null);
   await createAffiliateCommission(tx, {
     workspaceId: membership.workspaceId,
-    affiliateId: payment.referralAffiliateId,
+    affiliateId,
     sourceType: "MEMBERSHIP",
     sourceId: payment.id,
-    sourceLabel: membership.plan.name,
+    sourceLabel: payment.membershipRenewal ? `${membership.plan.name} (renewal)` : membership.plan.name,
+    itemRateBps: percentToBps(membership.plan.affiliateCommissionPercent),
     basisAmount: payment.amount,
     purchaserCustomerId: membership.customerId,
     purchaserEmail: membership.customer.email,

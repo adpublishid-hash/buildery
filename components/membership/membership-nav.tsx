@@ -1,37 +1,32 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CreditCard, LayoutDashboard, PanelsTopLeft, Users } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { TabBar } from "@/components/ui/tab-bar";
 
 const items = [
-  { href: "/dashboard/membership", label: "Overview" },
-  { href: "/dashboard/membership/plans", label: "Plans" },
-  { href: "/dashboard/membership/members", label: "Members" },
+  { key: "overview", href: "/dashboard/membership", label: "Overview", icon: LayoutDashboard },
+  { key: "plans", href: "/dashboard/membership/plans", label: "Plans", icon: CreditCard },
+  { key: "members", href: "/dashboard/membership/members", label: "Members", icon: Users },
+  { key: "settings", href: "/dashboard/membership/settings", label: "Page settings", icon: PanelsTopLeft },
 ];
 
-export function MembershipNav() {
+export function MembershipNav({ expiringSoon = 0 }: { expiringSoon?: number }) {
   const pathname = usePathname() ?? "";
+  const active =
+    items.find((item) => item.key !== "overview" && pathname.startsWith(item.href))?.key ??
+    "overview";
+
   return (
-    <div className="mb-6 flex gap-1 rounded-lg border border-zinc-200 bg-white p-1">
-      {items.map((item) => {
-        const active = pathname === item.href;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "rounded-md px-3 py-1 text-sm transition-colors",
-              active
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-600 hover:text-zinc-900"
-            )}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-    </div>
+    <TabBar
+      ariaLabel="Membership sections"
+      active={active}
+      className="mb-[16px]"
+      items={items.map((item) => ({
+        ...item,
+        count: item.key === "members" ? expiringSoon : undefined,
+      }))}
+    />
   );
 }

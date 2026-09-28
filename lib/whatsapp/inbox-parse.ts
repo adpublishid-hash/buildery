@@ -3,9 +3,10 @@ import type { InboxMessageKind } from "@prisma/client";
 /**
  * Turns a provider webhook body into one inbound message.
  *
- * Two shapes are supported: WhatsApp Cloud API (WABA), which nests everything
- * under `entry[].changes[].value`, and the flat JSON the Indonesian gateways
- * (Fonnte, Onesender, Starsender) post. Anything that is not a message — a
+ * Three shapes are supported: WhatsApp Cloud API (WABA), which nests
+ * everything under `entry[].changes[].value`; WAHA's `{event, payload}`
+ * envelope; and the flat JSON the Indonesian gateways (Onesender,
+ * Starsender, Woowa, Kirimi) post. Anything that is not a message — a
  * delivery receipt, a status callback — parses to `null` so the route can
  * acknowledge it instead of failing.
  *
@@ -173,7 +174,55 @@ function kindFromMime(mime: string, url: string): InboxMessageKind {
   return "UNKNOWN";
 }
 
+/**
+ * WAHA wraps every event in `{event, session, payload}`. Only `message` is an
+ * inbound customer message: `message.any` also fires for our own sends, and
+ * group or channel chats are not one-to-one conversations the inbox models.
+ */
+function parseWaha(payload: unknown): ParsedInboxMessage | null | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const envelope = payload as { event?: unknown; session?: unknown; payload?: unknown };
+  if (typeof envelope.event !== "string" || typeof envelope.session !== "string") {
+    return undefined; // not a WAHA delivery
+  }
+  if (envelope.event !== "message") return null;
+  const message = (envelope.payload ?? {}) as Record<string, unknown>;
+  if (message.fromMe === true) return null;
+
+  const from = str(message.from);
+  if (!from || /@(g\.us|newsletter|broadcast)$/.test(from)) return null;
+  const data = (message._data ?? {}) as Record<string, unknown>;
+  const key = (data.key ?? {}) as Record<string, unknown>;
+  // Privacy ids (`@lid`) are not phone numbers; engines put the real number
+  // in an alternate field when they know it.
+  const jid = from.endsWith("@lid")
+    ? str(key.remoteJidAlt) || str(key.senderPn) || str(data.senderPn)
+    : from;
+  const phone = jid.split("@")[0].replace(/\D/g, "");
+  if (!phone) return null;
+
+  const media = (message.media ?? {}) as Record<string, unknown>;
+  const mediaUrl = message.hasMedia === true ? str(media.url) : "";
+  const mime = str(media.mimetype);
+  const body = str(message.body);
+  const kind: InboxMessageKind = message.hasMedia === true ? kindFromMime(mime, mediaUrl) : "TEXT";
+  if (!body && !mediaUrl && kind === "TEXT") return null;
+
+  return {
+    phone,
+    name: str(data.notifyName) || str(data.pushName),
+    body,
+    kind,
+    providerMessageId: str(message.id),
+    mediaUrl: /^https?:\/\//i.test(mediaUrl) ? mediaUrl : null,
+    mediaMimeType: mime.includes("/") ? mime : null,
+    mediaFilename: str(media.filename) || null,
+  };
+}
+
 export function parseInboxWebhook(payload: unknown): ParsedInboxMessage | null {
+  const waha = parseWaha(payload);
+  if (waha !== undefined) return waha;
   const waba = parseWaba(payload);
   if (waba?.phone && (waba.body || waba.mediaUrl || waba.kind !== "TEXT")) {
     return waba;

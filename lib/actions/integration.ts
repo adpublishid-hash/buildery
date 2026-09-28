@@ -110,6 +110,8 @@ export async function updateIntegrationsAction(
     whatsappApiKey: formData.get("whatsappApiKey") ?? "",
     whatsappSenderNumber: formData.get("whatsappSenderNumber") ?? "",
     whatsappPhoneNumberId: formData.get("whatsappPhoneNumberId") ?? "",
+    whatsappApiBaseUrl: formData.get("whatsappApiBaseUrl") ?? "",
+    whatsappUserCode: formData.get("whatsappUserCode") ?? "",
     whatsappWebhookVerifyToken:
       formData.get("whatsappWebhookVerifyToken") ?? "",
     whatsappWebhookSecret: formData.get("whatsappWebhookSecret") ?? "",
@@ -170,6 +172,8 @@ export async function updateIntegrationsAction(
     whatsappProvider: parsed.data.whatsappProvider || null,
     whatsappSenderNumber: parsed.data.whatsappSenderNumber?.trim() || null,
     whatsappPhoneNumberId: parsed.data.whatsappPhoneNumberId?.trim() || null,
+    whatsappApiBaseUrl: parsed.data.whatsappApiBaseUrl?.trim().replace(/\/+$/, "") || null,
+    whatsappUserCode: parsed.data.whatsappUserCode?.trim() || null,
     whatsappIsActive: parsed.data.whatsappIsActive,
   };
 

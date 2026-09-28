@@ -54,6 +54,22 @@ Implementation status: complete (September 11, 2026).
 - Insights include enrollments, completion rate, revenue, average study time,
   lesson drop-off, quiz performance, and review moderation.
 
+## Workspace-wide LMS operations (28 September 2026)
+
+- Students page lists enrollments across every course with course/status
+  filters, search, progress, access, CSV export, and suspend/activate/reset.
+- Adding students by hand never downgrades a completed enrollment, never
+  shortens longer access, respects the enrollment limit, and sends the access
+  email (`lib/lms-enrollment-rules.ts`).
+- Reactivating a student grants the course's normal access period instead of
+  lifetime access.
+- Grading queue across every course: grade (completes the lesson) or return
+  for revision with feedback (lesson stays open, learner resubmits). Graded
+  work can't be resubmitted by the learner; grades can be corrected.
+- Course editor uses one access-type choice: free enrollment, paid, or
+  members only (optionally with a price).
+- Student CSV exports neutralise spreadsheet formulas.
+
 ## Deployment checklist
 
 - Prisma migration: `20260911130000_lms_upgrade` (applied).

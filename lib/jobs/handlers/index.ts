@@ -12,6 +12,7 @@ import { pruneInboxMessages } from "@/lib/inbox-retention";
 import { sweepPaymentReminders } from "@/lib/payment-reminders";
 import { sweepStockNotifications } from "@/lib/stock-notifications";
 import { reconcilePendingMidtransPayments } from "@/lib/payment-reconciliation";
+import { reconcilePendingGatewayPayments } from "@/lib/integrations/payments/gateway";
 import { expireOverduePayments } from "@/lib/payments";
 import { pruneFinishedJobs } from "@/lib/jobs/queue";
 import { retryFormDeliveries } from "@/lib/form-delivery-retry";
@@ -157,7 +158,11 @@ export const JOB_HANDLERS: { [K in JobKind]: JobHandler<K> } = {
   },
   PAYMENT_RECONCILIATION: async () => {
     const summary = await reconcilePendingMidtransPayments();
+    const gateways = await reconcilePendingGatewayPayments();
     return [
+      gateways.scanned > 0
+        ? `gateways=${gateways.scanned}/synced:${gateways.synced}/failed:${gateways.failed}`
+        : "",
       summary.unconfigured ? "unconfigured=true" : "",
       `scanned=${summary.scanned}`,
       summary.synced > 0 ? `synced=${summary.synced}` : "",

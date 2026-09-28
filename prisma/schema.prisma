@@ -251,6 +251,10 @@ enum ShippingMethodType {
 
 enum InboxChannel {
   WHATSAPP
+  TELEGRAM
+  INSTAGRAM
+  MESSENGER
+  WEBCHAT
 }
 
 enum InboxConversationStatus {
@@ -272,10 +276,30 @@ enum InboxMessageStatus {
   FAILED
 }
 
+/// A family of third-party services a workspace can connect.
+enum IntegrationCategory {
+  EMAIL
+  PAYMENT
+  INBOX
+  SHIPPING
+}
+
+enum IntegrationStatus {
+  UNTESTED
+  CONNECTED
+  ERROR
+}
+
 enum WhatsAppProvider {
   ONESENDER
   WABA
   STARSENDER
+  /// Self-hosted WAHA (WhatsApp HTTP API).
+  WAHA
+  /// Woowa, on the account's own server URL.
+  WOOWA
+  /// Kirimi.id hosted gateway.
+  KIRIMI
 }
 
 enum StoreNotificationChannel {
@@ -813,6 +837,7 @@ model Workspace {
   membershipGrants       MembershipGrant[]
   membershipEvents       MembershipEvent[]
   integration            IntegrationSetting?
+  integrationConnections IntegrationConnection[]
   reports                AbuseReport[]
   payments               Payment[]
   refunds                OrderRefund[]
@@ -1214,48 +1239,50 @@ model ProductCategory {
 }
 
 model Product {
-  id                     String             @id @default(cuid())
-  workspaceId            String
-  categoryId             String?
-  imageId                String?
-  name                   String
-  slug                   String
-  description            String?            @db.Text
-  details                String?            @db.Text
-  type                   ProductType        @default(PHYSICAL)
-  status                 ProductStatus      @default(DRAFT)
-  pricingMode            ProductPricingMode @default(ONE_TIME)
-  price                  Int // whole currency units (e.g. rupiah)
-  costPrice              Int?               @default(0)
-  discountPrice          Int?
-  stock                  Int                @default(0)
-  sku                    String?
-  lowStockThreshold      Int?
-  lowStockAlertedAt      DateTime?
-  lowStockResolvedAt     DateTime?
-  metaTitle              String?
-  metaDescription        String?
-  downloadUrl            String?
-  downloadLabel          String?
+  id                         String             @id @default(cuid())
+  workspaceId                String
+  categoryId                 String?
+  imageId                    String?
+  name                       String
+  slug                       String
+  description                String?            @db.Text
+  details                    String?            @db.Text
+  type                       ProductType        @default(PHYSICAL)
+  status                     ProductStatus      @default(DRAFT)
+  pricingMode                ProductPricingMode @default(ONE_TIME)
+  price                      Int // whole currency units (e.g. rupiah)
+  /// Affiliate commission for this product, in percent. Null = program default.
+  affiliateCommissionPercent Int?
+  costPrice                  Int?               @default(0)
+  discountPrice              Int?
+  stock                      Int                @default(0)
+  sku                        String?
+  lowStockThreshold          Int?
+  lowStockAlertedAt          DateTime?
+  lowStockResolvedAt         DateTime?
+  metaTitle                  String?
+  metaDescription            String?
+  downloadUrl                String?
+  downloadLabel              String?
   // Multiple post-purchase access links. Falls back to downloadUrl/Label
   // for products created before this existed.
-  digitalAccessItems     Json               @default("[]")
-  serviceLocation        String?
-  serviceDurationMinutes Int?
-  eventStartsAt          DateTime?
-  eventEndsAt            DateTime?
-  eventLocation          String?
-  weightGrams            Int?
-  lengthCm               Int?
-  widthCm                Int?
-  heightCm               Int?
-  galleryImageIds        String[]           @default([])
+  digitalAccessItems         Json               @default("[]")
+  serviceLocation            String?
+  serviceDurationMinutes     Int?
+  eventStartsAt              DateTime?
+  eventEndsAt                DateTime?
+  eventLocation              String?
+  weightGrams                Int?
+  lengthCm                   Int?
+  widthCm                    Int?
+  heightCm                   Int?
+  galleryImageIds            String[]           @default([])
   /// Option axes a variant is built from, e.g.
   /// `[{ "name": "Warna", "values": ["Hitam", "Putih"] }]`.
   /// Variants carry the chosen value per axis in their own `options`, which is
   /// what lets the storefront show one selector per axis instead of a flat
   /// list of hand-typed names.
-  variantOptions         Json               @default("[]")
+  variantOptions             Json               @default("[]")
 
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   category           ProductCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -1713,7 +1740,12 @@ model InboxConversation {
   channel            InboxChannel            @default(WHATSAPP)
   status             InboxConversationStatus @default(OPEN)
   contactName        String?
+  /// The contact's address on the channel: a phone number for WhatsApp, the
+  /// chat / sender id for Telegram, Messenger and Instagram, and a hash of the
+  /// visitor token for web chat (the raw token is the visitor's secret).
   contactPhone       String
+  /// Given by a web chat visitor; other channels match customers by phone.
+  contactEmail       String?
   subject            String?
   lastMessagePreview String?
   lastMessageAt      DateTime?
@@ -2072,17 +2104,17 @@ model MetaCapiEvent {
 /// An extra Meta or TikTok pixel. Every event the primary pixel gets goes to
 /// these too, in the browser and (with a token) through CAPI / Events API.
 model AdPixel {
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   workspaceId   String
   /// "META" | "TIKTOK"
   provider      String
   pixelId       String
   label         String?
   /// Server-side copy (Meta CAPI / TikTok Events API). Never sent to a browser.
-  serverEnabled Boolean  @default(false)
-  accessToken   String?  @db.Text
+  serverEnabled Boolean @default(false)
+  accessToken   String? @db.Text
   testEventCode String?
-  isActive      Boolean  @default(true)
+  isActive      Boolean @default(true)
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -2436,31 +2468,33 @@ model PaymentReconciliationEvent {
 // ============================================================
 
 model Course {
-  id                 String           @id @default(cuid())
-  workspaceId        String
-  imageId            String?
-  title              String
-  slug               String
-  summary            String?
-  description        String?          @db.Text
-  status             CourseStatus     @default(DRAFT)
-  isFree             Boolean          @default(true)
-  price              Int              @default(0)
-  requiredLevel      MembershipLevel  @default(FREE)
-  publishedAt        DateTime?
-  categoryId         String?
-  instructorName     String?
-  instructorBio      String?          @db.Text
-  difficulty         CourseDifficulty @default(BEGINNER)
-  durationMinutes    Int              @default(0)
-  accessDays         Int              @default(0)
-  enrollmentLimit    Int?
-  sequentialProgress Boolean          @default(false)
-  certificateEnabled Boolean          @default(false)
-  featured           Boolean          @default(false)
-  tags               String[]         @default([])
-  seoTitle           String?
-  metaDescription    String?
+  id                         String           @id @default(cuid())
+  workspaceId                String
+  imageId                    String?
+  title                      String
+  slug                       String
+  summary                    String?
+  description                String?          @db.Text
+  status                     CourseStatus     @default(DRAFT)
+  isFree                     Boolean          @default(true)
+  price                      Int              @default(0)
+  /// Affiliate commission for this course, in percent. Null = program default.
+  affiliateCommissionPercent Int?
+  requiredLevel              MembershipLevel  @default(FREE)
+  publishedAt                DateTime?
+  categoryId                 String?
+  instructorName             String?
+  instructorBio              String?          @db.Text
+  difficulty                 CourseDifficulty @default(BEGINNER)
+  durationMinutes            Int              @default(0)
+  accessDays                 Int              @default(0)
+  enrollmentLimit            Int?
+  sequentialProgress         Boolean          @default(false)
+  certificateEnabled         Boolean          @default(false)
+  featured                   Boolean          @default(false)
+  tags                       String[]         @default([])
+  seoTitle                   String?
+  metaDescription            String?
 
   workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   image         UploadFile?          @relation("CourseImage", fields: [imageId], references: [id], onDelete: SetNull)
@@ -3177,22 +3211,24 @@ model FormDelivery {
 // ============================================================
 
 model AffiliateProgram {
-  id                String                    @id @default(cuid())
-  workspaceId       String                    @unique
-  name              String                    @default("Affiliate Program")
-  description       String?
-  commissionPercent Int                       @default(20)
-  isOpen            Boolean                   @default(true)
-  approvalMode      AffiliateApprovalMode     @default(MANUAL)
-  attributionModel  AffiliateAttributionModel @default(LAST_CLICK)
-  attributionDays   Int                       @default(30)
-  holdDays          Int                       @default(14)
-  minimumPayout     Int                       @default(100000)
-  allowSelfReferral Boolean                   @default(false)
-  includeShipping   Boolean                   @default(false)
-  includeTax        Boolean                   @default(false)
-  includeFees       Boolean                   @default(false)
-  terms             String?                   @db.Text
+  id                   String                    @id @default(cuid())
+  workspaceId          String                    @unique
+  name                 String                    @default("Affiliate Program")
+  description          String?
+  commissionPercent    Int                       @default(20)
+  isOpen               Boolean                   @default(true)
+  approvalMode         AffiliateApprovalMode     @default(MANUAL)
+  attributionModel     AffiliateAttributionModel @default(LAST_CLICK)
+  attributionDays      Int                       @default(30)
+  holdDays             Int                       @default(14)
+  minimumPayout        Int                       @default(100000)
+  allowSelfReferral    Boolean                   @default(false)
+  includeShipping      Boolean                   @default(false)
+  includeTax           Boolean                   @default(false)
+  includeFees          Boolean                   @default(false)
+  /// Pay the original referrer again on membership renewals, even without a fresh click.
+  recurringCommissions Boolean                   @default(false)
+  terms                String?                   @db.Text
 
   workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   affiliates Affiliate[]
@@ -3219,6 +3255,8 @@ model Affiliate {
   payoutAccountLabel     String?
   payoutDetailsEncrypted String?                @db.Text
   termsAcceptedAt        DateTime?
+  /// Negotiated rate for this partner, in percent; beats every other rate. Null = none.
+  commissionPercent      Int?
 
   program     AffiliateProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
   workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -3447,21 +3485,23 @@ model Coupon {
 }
 
 model MembershipPlan {
-  id          String          @id @default(cuid())
-  workspaceId String
-  productId   String?
-  name        String
-  slug        String
-  description String?
-  level       MembershipLevel
-  price       Int             @default(0)
-  accessDays  Int             @default(0)
-  isActive    Boolean         @default(true)
-  benefits    Json            @default("[]")
-  recommended Boolean         @default(false)
-  ctaLabel    String?
-  sortOrder   Int             @default(0)
-  archivedAt  DateTime?
+  id                         String          @id @default(cuid())
+  workspaceId                String
+  productId                  String?
+  name                       String
+  slug                       String
+  description                String?
+  level                      MembershipLevel
+  price                      Int             @default(0)
+  /// Affiliate commission for this plan, in percent. Null = program default.
+  affiliateCommissionPercent Int?
+  accessDays                 Int             @default(0)
+  isActive                   Boolean         @default(true)
+  benefits                   Json            @default("[]")
+  recommended                Boolean         @default(false)
+  ctaLabel                   String?
+  sortOrder                  Int             @default(0)
+  archivedAt                 DateTime?
 
   workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   product     Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -3599,6 +3639,8 @@ model IntegrationSetting {
   whatsappDefaultTemplateLanguage   String?           @default("en_US")
   whatsappGraphVersion              String?           @default("v25.0")
   whatsappApiBaseUrl                String?
+  /// Kirimi's account "user code", sent with every request next to the secret.
+  whatsappUserCode                  String?
   // Columns from the earlier WhatsApp Cloud / OneSender integration. Nothing
   // reads them any more; they are declared so the schema matches every
   // database that still carries them, and so reconciliation never proposes
@@ -3617,6 +3659,39 @@ model IntegrationSetting {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   oneSenderEnabled Boolean  @default(false)
+}
+
+/// One connected third-party provider (Resend, Xendit, KiriminAja, …).
+/// Which fields exist is defined by the provider registry in code
+/// (lib/integrations/registry.ts); secrets are stored encrypted, never in
+/// `config`, and never sent to the browser.
+model IntegrationConnection {
+  id           String              @id @default(cuid())
+  workspaceId  String
+  category     IntegrationCategory
+  /// Registry id, e.g. "resend", "xendit", "kiriminaja".
+  provider     String
+  enabled      Boolean             @default(false)
+  /// The provider used by default within its category (e.g. the checkout gateway).
+  isPrimary    Boolean             @default(false)
+  /// Non-secret settings, validated against the registry.
+  config       Json                @default("{}")
+  /// AES-256-GCM encrypted JSON of secret fields.
+  secrets      String?             @db.Text
+  /// Random, unguessable id that routes inbound webhooks to this connection.
+  webhookKey   String              @unique
+  status       IntegrationStatus   @default(UNTESTED)
+  lastTestedAt DateTime?
+  lastError    String?             @db.Text
+  lastEventAt  DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId, category])
 }
 
 // ============================================================

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Script from "next/script";
 import { cookies } from "next/headers";
 import type { Metadata } from "next";
 
@@ -62,6 +63,15 @@ export default async function PublicSiteLayout({
       ])
     : [null, null];
   const siteFooter = website ? parseSiteChrome(website).footer : null;
+
+  // Web chat from the integration catalog: its bubble appears on every page
+  // of the store while the connection is switched on.
+  const webchat = workspace
+    ? await prisma.integrationConnection.findFirst({
+        where: { workspaceId: workspace.id, provider: "webchat", enabled: true },
+        select: { webhookKey: true },
+      })
+    : null;
 
   // Only queried when the popup is switched on, so a store that does not use
   // it pays nothing for it.
@@ -140,6 +150,13 @@ export default async function PublicSiteLayout({
         <SalesNotification
           items={salesNotifications}
           template={storefront.salesNotificationText}
+        />
+      ) : null}
+      {webchat ? (
+        <Script
+          id="webchat-widget"
+          src={`/api/integrations/webchat/${webchat.webhookKey}/widget.js`}
+          strategy="lazyOnload"
         />
       ) : null}
       {workspace ? (

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getCurrentWorkspace, listMyWorkspaces } from "@/lib/workspace";
 import { countUnreadConversations } from "@/lib/inbox";
+import { prisma } from "@/lib/prisma";
+import { countSubmissionsToGrade } from "@/lib/lms-overview";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { DashboardShell } from "@/components/dashboard/shell";
@@ -33,10 +35,19 @@ export default async function DashboardLayout({
 
   // An inbound WhatsApp message arrives through a webhook, so without a badge
   // here it is invisible from every page but the inbox itself.
-  const unreadInbox = current
-    ? await countUnreadConversations(current.workspace.id)
-    : 0;
-  const navBadges = { "/dashboard/inbox": unreadInbox };
+  const [unreadInbox, pendingAffiliates, toGrade] = current
+    ? await Promise.all([
+        countUnreadConversations(current.workspace.id),
+        // Applications and submissions sit unseen otherwise: nothing else tells the owner.
+        prisma.affiliate.count({ where: { workspaceId: current.workspace.id, status: "PENDING" } }),
+        countSubmissionsToGrade(current.workspace.id),
+      ])
+    : [0, 0, 0];
+  const navBadges = {
+    "/dashboard/inbox": unreadInbox,
+    "/dashboard/affiliate": pendingAffiliates,
+    "/dashboard/courses/grading": toGrade,
+  };
 
   const workspaceOptions: WorkspaceOption[] = memberships.map((m) => ({
     id: m.workspace.id,

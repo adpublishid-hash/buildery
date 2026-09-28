@@ -55,6 +55,7 @@ export default async function PublicMembershipsPage({
       orderBy: [{ recommended: "desc" }, { sortOrder: "asc" }, { price: "asc" }],
       select: {
         id: true,
+        slug: true,
         name: true,
         description: true,
         level: true,

@@ -14,14 +14,19 @@ import {
   activateMembership,
   extendMembershipGrant,
 } from "@/lib/membership-lifecycle";
+import {
+  hasAccessNow,
+  isAdminMembershipStatus,
+  nextCopySlug,
+} from "@/lib/membership-dashboard";
 import { queueMembershipEmailNotification } from "@/lib/store-notifications";
 import {
   assignMembershipSchema,
   membershipPlanSchema,
 } from "@/lib/zod";
 
-type ActionResult =
-  | { ok: true }
+type ActionResult<T = undefined> =
+  | { ok: true; data?: T }
   | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
 
 async function requireEditableWorkspace() {
@@ -32,6 +37,18 @@ async function requireEditableWorkspace() {
   const plan = await getUserPlan(current.workspace.createdById);
   if (!plan.hasMembership) return null;
   return { workspace: current.workspace, userId: session.user.id };
+}
+
+function revalidateMembership(workspaceSlug: string) {
+  revalidatePath("/dashboard/membership");
+  revalidatePath("/dashboard/membership/plans");
+  revalidatePath("/dashboard/membership/members");
+  revalidatePath(`/site/${workspaceSlug}/memberships`);
+}
+
+async function findWorkspacePlan(workspaceId: string, planId: string) {
+  const plan = await prisma.membershipPlan.findUnique({ where: { id: planId } });
+  return plan && plan.workspaceId === workspaceId ? plan : null;
 }
 
 function parsePlan(formData: FormData) {
@@ -123,9 +140,7 @@ export async function createMembershipPlanAction(
     },
   });
 
-  revalidatePath("/dashboard/membership/plans");
-  revalidatePath("/dashboard/membership");
-  revalidatePath(`/site/${workspace.slug}/memberships`);
+  revalidateMembership(workspace.slug);
   return { ok: true };
 }
 
@@ -137,12 +152,8 @@ export async function updateMembershipPlanAction(
   if (!context) return { ok: false, error: "Not allowed." };
   const { workspace } = context;
 
-  const plan = await prisma.membershipPlan.findUnique({
-    where: { id: planId },
-    select: { workspaceId: true },
-  });
-  if (!plan || plan.workspaceId !== workspace.id)
-    return { ok: false, error: "Plan not found." };
+  const plan = await findWorkspacePlan(workspace.id, planId);
+  if (!plan) return { ok: false, error: "Plan not found." };
 
   const parsed = parsePlan(formData);
   if (!parsed.success) {
@@ -181,19 +192,18 @@ export async function updateMembershipPlanAction(
       level: parsed.data.level,
       price: parsed.data.price,
       accessDays: parsed.data.accessDays,
-      isActive: parsed.data.isActive,
+      // Editing an archived plan keeps it archived (and hidden from signup);
+      // restoring is an explicit action.
+      isActive: plan.archivedAt ? false : parsed.data.isActive,
       productId: parsed.data.productId || null,
       benefits: benefitsFrom(parsed.data.benefits),
       recommended: parsed.data.recommended,
       ctaLabel: parsed.data.ctaLabel?.trim() || null,
       sortOrder: parsed.data.sortOrder,
-      archivedAt: null,
     },
   });
 
-  revalidatePath("/dashboard/membership/plans");
-  revalidatePath("/dashboard/membership");
-  revalidatePath(`/site/${workspace.slug}/memberships`);
+  revalidateMembership(workspace.slug);
   return { ok: true };
 }
 
@@ -204,27 +214,100 @@ export async function deleteMembershipPlanAction(
   if (!context) return { ok: false, error: "Not allowed." };
   const { workspace } = context;
 
-  const plan = await prisma.membershipPlan.findUnique({
-    where: { id: planId },
-    select: { workspaceId: true },
-  });
-  if (!plan || plan.workspaceId !== workspace.id)
-    return { ok: false, error: "Plan not found." };
+  const plan = await findWorkspacePlan(workspace.id, planId);
+  if (!plan) return { ok: false, error: "Plan not found." };
 
   await prisma.membershipPlan.update({
     where: { id: planId },
-    data: { isActive: false, archivedAt: new Date() },
+    data: { isActive: false, recommended: false, archivedAt: new Date() },
   });
-  revalidatePath("/dashboard/membership");
-  revalidatePath("/dashboard/membership/plans");
-  revalidatePath("/dashboard/membership/members");
-  revalidatePath(`/site/${workspace.slug}/memberships`);
+  revalidateMembership(workspace.slug);
   return { ok: true };
+}
+
+/** Brings an archived plan back as an inactive draft so it can be reviewed before going live. */
+export async function restoreMembershipPlanAction(
+  planId: string
+): Promise<ActionResult> {
+  const context = await requireEditableWorkspace();
+  if (!context) return { ok: false, error: "Not allowed." };
+  const { workspace } = context;
+
+  const plan = await findWorkspacePlan(workspace.id, planId);
+  if (!plan) return { ok: false, error: "Plan not found." };
+  if (!plan.archivedAt) return { ok: false, error: "This plan is not archived." };
+
+  await prisma.membershipPlan.update({
+    where: { id: planId },
+    data: { archivedAt: null, isActive: false },
+  });
+  revalidateMembership(workspace.slug);
+  return { ok: true };
+}
+
+export async function setMembershipPlanActiveAction(
+  planId: string,
+  isActive: boolean
+): Promise<ActionResult> {
+  const context = await requireEditableWorkspace();
+  if (!context) return { ok: false, error: "Not allowed." };
+  const { workspace } = context;
+
+  const plan = await findWorkspacePlan(workspace.id, planId);
+  if (!plan) return { ok: false, error: "Plan not found." };
+  if (plan.archivedAt) {
+    return { ok: false, error: "Restore the plan before publishing it." };
+  }
+
+  await prisma.membershipPlan.update({
+    where: { id: planId },
+    data: { isActive: Boolean(isActive) },
+  });
+  revalidateMembership(workspace.slug);
+  return { ok: true };
+}
+
+/** Copies a plan's settings into a new, inactive plan. Members are not copied. */
+export async function duplicateMembershipPlanAction(
+  planId: string
+): Promise<ActionResult<{ planId: string }>> {
+  const context = await requireEditableWorkspace();
+  if (!context) return { ok: false, error: "Not allowed." };
+  const { workspace } = context;
+
+  const plan = await findWorkspacePlan(workspace.id, planId);
+  if (!plan) return { ok: false, error: "Plan not found." };
+
+  const taken = await prisma.membershipPlan.findMany({
+    where: { workspaceId: workspace.id, slug: { startsWith: plan.slug.slice(0, 40) } },
+    select: { slug: true },
+  });
+  const created = await prisma.membershipPlan.create({
+    data: {
+      workspaceId: workspace.id,
+      name: `${plan.name} (copy)`.slice(0, 60),
+      slug: nextCopySlug(plan.slug, taken.map((row) => row.slug)),
+      description: plan.description,
+      level: plan.level,
+      price: plan.price,
+      accessDays: plan.accessDays,
+      isActive: false,
+      productId: plan.productId,
+      benefits: Array.isArray(plan.benefits)
+        ? plan.benefits.filter((item): item is string => typeof item === "string")
+        : [],
+      recommended: false,
+      ctaLabel: plan.ctaLabel,
+      sortOrder: plan.sortOrder,
+    },
+  });
+  revalidateMembership(workspace.slug);
+  return { ok: true, data: { planId: created.id } };
 }
 
 export async function assignMembershipAction(
   formData: FormData
-): Promise<ActionResult> {
+): Promise<ActionResult<{ renewed: boolean }>> {
   const context = await requireEditableWorkspace();
   if (!context) return { ok: false, error: "Not allowed." };
   const { workspace, userId } = context;
@@ -245,12 +328,15 @@ export async function assignMembershipAction(
     };
   }
 
-  const plan = await prisma.membershipPlan.findUnique({
-    where: { id: parsed.data.planId },
-    select: { workspaceId: true, accessDays: true, name: true },
-  });
-  if (!plan || plan.workspaceId !== workspace.id)
-    return { ok: false, error: "Plan not found." };
+  const plan = await findWorkspacePlan(workspace.id, parsed.data.planId);
+  if (!plan) return { ok: false, error: "Plan not found." };
+  if (plan.archivedAt) {
+    return {
+      ok: false,
+      error: "This plan is archived. Restore it or pick another plan.",
+      fieldErrors: { planId: ["Plan is archived."] },
+    };
+  }
 
   const email = parsed.data.email.toLowerCase().trim();
   const customer = await prisma.customer.upsert({
@@ -291,10 +377,8 @@ export async function assignMembershipAction(
     body: `Hi ${customer.name}, your ${plan.name} access is now active.`,
   }).catch((error) => console.warn("Membership assignment email failed", error));
 
-  revalidatePath("/dashboard/membership/members");
-  revalidatePath("/dashboard/membership");
-  revalidatePath(`/site/${workspace.slug}/memberships`);
-  return { ok: true };
+  revalidateMembership(workspace.slug);
+  return { ok: true, data: { renewed: activation.renewed } };
 }
 
 export async function setMembershipStatusAction(
@@ -305,12 +389,40 @@ export async function setMembershipStatusAction(
   if (!context) return { ok: false, error: "Not allowed." };
   const { workspace, userId } = context;
 
+  if (!isAdminMembershipStatus(status)) {
+    return { ok: false, error: "Invalid membership status." };
+  }
+
   const membership = await prisma.customerMembership.findUnique({
     where: { id: membershipId },
-    select: { workspaceId: true },
+    select: {
+      workspaceId: true,
+      status: true,
+      expiresAt: true,
+      plan: { select: { archivedAt: true } },
+    },
   });
   if (!membership || membership.workspaceId !== workspace.id)
     return { ok: false, error: "Membership not found." };
+
+  if (status === "ACTIVE") {
+    if (hasAccessNow(membership, Date.now())) {
+      return { ok: false, error: "This membership already has access." };
+    }
+    if (membership.plan.archivedAt) {
+      return { ok: false, error: "The plan is archived. Restore it before reactivating members." };
+    }
+    // Reactivation starts a fresh access period with its own grant, so the
+    // member doesn't come back "active" with an end date in the past.
+    await prisma.$transaction((tx) =>
+      activateMembership(tx, { membershipId, source: "MANUAL", actorId: userId })
+    );
+    revalidateMembership(workspace.slug);
+    return { ok: true };
+  }
+  if (membership.status === status) {
+    return { ok: false, error: `This membership is already ${status.toLowerCase()}.` };
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.customerMembership.update({
@@ -325,16 +437,14 @@ export async function setMembershipStatusAction(
       data: {
         workspaceId: workspace.id,
         membershipId,
-        type: status === "EXPIRED" ? "EXPIRED" : status === "CANCELLED" ? "CANCELLED" : "ACTIVATED",
+        type: status === "EXPIRED" ? "EXPIRED" : "CANCELLED",
         actorId: userId,
         detail: { status },
       },
     });
   });
 
-  revalidatePath("/dashboard/membership/members");
-  revalidatePath("/dashboard/membership");
-  revalidatePath(`/site/${workspace.slug}/memberships`);
+  revalidateMembership(workspace.slug);
   return { ok: true };
 }
 
@@ -362,9 +472,7 @@ export async function extendMembershipAction(
     extendMembershipGrant(tx, { membershipId, days, actorId: userId })
   );
 
-  revalidatePath("/dashboard/membership/members");
-  revalidatePath("/dashboard/membership");
-  revalidatePath(`/site/${workspace.slug}/memberships`);
+  revalidateMembership(workspace.slug);
   return { ok: true };
 }
 
@@ -401,8 +509,6 @@ export async function removeMembershipAction(
       },
     });
   });
-  revalidatePath("/dashboard/membership/members");
-  revalidatePath("/dashboard/membership");
-  revalidatePath(`/site/${workspace.slug}/memberships`);
+  revalidateMembership(workspace.slug);
   return { ok: true };
 }

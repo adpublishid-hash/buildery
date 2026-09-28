@@ -34,6 +34,7 @@ export type ProgramFormValues = {
   includeShipping: boolean;
   includeTax: boolean;
   includeFees: boolean;
+  recurringCommissions: boolean;
   terms: string;
 };
 
@@ -71,6 +72,7 @@ export function ProgramForm({
     fd.set("includeShipping", String(values.includeShipping));
     fd.set("includeTax", String(values.includeTax));
     fd.set("includeFees", String(values.includeFees));
+    fd.set("recurringCommissions", String(values.recurringCommissions));
     fd.set("terms", values.terms);
 
     startTransition(async () => {
@@ -207,6 +209,12 @@ export function ProgramForm({
         <Toggle control={control} name="includeTax" label="Include added tax" />
         <Toggle control={control} name="includeFees" label="Include payment/COD fees" />
         <Toggle control={control} name="allowSelfReferral" label="Allow self-referrals" />
+        <Toggle
+          control={control}
+          name="recurringCommissions"
+          label="Recurring commission on membership renewals"
+          hint="Off: a renewal pays only if it came through a referral link. On: the partner who referred the member is paid again on every renewal."
+        />
       </div>
 
       </fieldset>
@@ -250,14 +258,18 @@ function NumberField({ id, label, min, max, registration }: {
   </div>;
 }
 
-function Toggle({ control, name, label }: {
+function Toggle({ control, name, label, hint }: {
   control: Control<ProgramFormValues>;
-  name: "includeShipping" | "includeTax" | "includeFees" | "allowSelfReferral";
+  name: "includeShipping" | "includeTax" | "includeFees" | "allowSelfReferral" | "recurringCommissions";
   label: string;
+  hint?: string;
 }) {
   return <Controller control={control} name={name} render={({ field }) => (
     <div className="flex items-center justify-between gap-4">
-      <Label htmlFor={`toggle-${name}`} className="font-normal">{label}</Label>
+      <div className="min-w-0">
+        <Label htmlFor={`toggle-${name}`} className="font-normal">{label}</Label>
+        {hint ? <p className="mt-[2px] text-[11px] leading-[1.45] text-kv-muted-fg">{hint}</p> : null}
+      </div>
       <Switch id={`toggle-${name}`} checked={field.value} onCheckedChange={field.onChange} />
     </div>
   )} />;

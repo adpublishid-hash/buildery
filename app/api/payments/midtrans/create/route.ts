@@ -11,6 +11,7 @@ import { verifyPublicAccessToken } from "@/lib/public-access-token";
 import { rateLimitByIp } from "@/lib/rate-limit";
 import { getWorkspaceMidtransConfig } from "@/lib/ecommerce-settings";
 import { reportError } from "@/lib/error-reporting";
+import { startWorkspaceGatewayCheckout } from "@/lib/integrations/payments/checkout";
 
 function appOrigin(req: NextRequest) {
   const env = process.env.NEXT_PUBLIC_APP_URL;
@@ -19,8 +20,9 @@ function appOrigin(req: NextRequest) {
 }
 
 /**
- * Starts a payment. Given a PENDING payment id, creates a Midtrans Snap
- * transaction and returns the redirect URL. When Midtrans isn't configured
+ * Starts a payment. Given a PENDING payment id, creates a checkout at the
+ * workspace's connected payment gateway (Xendit, Stripe, PayPal, Duitku) or,
+ * failing that, a Midtrans Snap transaction, and returns the redirect URL. When Midtrans isn't configured
  * the payment is settled instantly (sandbox-free local testing).
  */
 export async function POST(req: NextRequest) {
@@ -78,6 +80,23 @@ export async function POST(req: NextRequest) {
     payment.enrollment?.customer ??
     payment.customerMembership?.customer ??
     null;
+
+  // --- A payment gateway connected in the integration catalog wins ---
+  try {
+    const gateway = await startWorkspaceGatewayCheckout(
+      { ...payment, customer },
+      { origin, accessToken }
+    );
+    if (gateway) return NextResponse.json({ url: gateway.url });
+  } catch (error) {
+    reportError("payment gateway checkout failed", error, {
+      context: { paymentId: payment.id },
+    });
+    return NextResponse.json(
+      { error: "Could not start the payment. Please try again." },
+      { status: 502 }
+    );
+  }
 
   // --- Sandbox-free mode: settle instantly ---
   // This store's own credentials; falls back to the deployment's env vars.

@@ -46,6 +46,38 @@ import { MEMBERSHIP_LEVEL_LABEL } from "@/lib/labels";
 import { publicSiteHref } from "@/lib/public-url";
 import { cn } from "@/lib/utils";
 
+type AccessType = "FREE" | "PAID" | "MEMBERS";
+
+const ACCESS_TYPES: {
+  key: AccessType;
+  label: string;
+  description: string;
+  icon: typeof Globe2;
+  tone: string;
+}[] = [
+  {
+    key: "FREE",
+    label: "Free enrollment",
+    description: "Free, but learners sign in so progress, quizzes, and certificates are saved.",
+    icon: Globe2,
+    tone: "bg-emerald-50 text-emerald-600",
+  },
+  {
+    key: "PAID",
+    label: "Paid",
+    description: "Learners buy the course; access opens after payment.",
+    icon: CreditCard,
+    tone: "bg-violet-50 text-violet-600",
+  },
+  {
+    key: "MEMBERS",
+    label: "Members only",
+    description: "Included in your Basic or Premium membership plans.",
+    icon: LockKeyhole,
+    tone: "bg-amber-50 text-amber-600",
+  },
+];
+
 export type CourseFormValues = {
   title: string;
   slug: string;
@@ -129,8 +161,21 @@ export function CourseForm({
     (sum, plan) => sum + plan.memberCount,
     0
   );
-  const hasSelectedMembershipPlan =
-    requiredLevel === "FREE" || selectedLevelPlans.length > 0;
+  const accessType: AccessType =
+    requiredLevel !== "FREE" ? "MEMBERS" : pricing === "PAID" ? "PAID" : "FREE";
+
+  function chooseAccess(next: AccessType) {
+    if (next === "FREE") {
+      setValue("pricing", "FREE", { shouldDirty: true });
+      setValue("requiredLevel", "FREE", { shouldDirty: true });
+    } else if (next === "PAID") {
+      setValue("pricing", "PAID", { shouldDirty: true });
+      setValue("requiredLevel", "FREE", { shouldDirty: true });
+    } else {
+      setValue("pricing", "FREE", { shouldDirty: true });
+      if (requiredLevel === "FREE") setValue("requiredLevel", "BASIC", { shouldDirty: true });
+    }
+  }
   const priceNumber = Number(priceValue || 0);
   const formattedPrice =
     pricing === "FREE"
@@ -471,25 +516,95 @@ export function CourseForm({
               <Separator />
 
               <div className="space-y-2">
-                <Label htmlFor="pricing">Pricing</Label>
-                <Controller
-                  control={control}
-                  name="pricing"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger id="pricing">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="FREE">Free</SelectItem>
-                        <SelectItem value="PAID">Paid</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
+                <Label>Access type</Label>
+                <div role="radiogroup" aria-label="Access type" className="flex flex-col gap-2">
+                  {ACCESS_TYPES.map((option) => {
+                    const Icon = option.icon;
+                    const selected = accessType === option.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => chooseAccess(option.key)}
+                        className={cn(
+                          "flex w-full items-start gap-3 rounded-[10px] border-[0.8px] px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-kv-ring/40",
+                          selected
+                            ? "border-kv-fg bg-kv-secondary shadow-[inset_0_0_0_0.8px_rgb(var(--kv-fg))]"
+                            : "border-kv-border bg-kv-card hover:border-[#d1d5db] hover:bg-[#fcfcfc]"
+                        )}
+                      >
+                        <span className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md", option.tone)}>
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[13px] font-medium text-kv-fg">{option.label}</span>
+                          <span className="mt-0.5 block text-[12px] leading-[1.45] text-kv-muted-fg">{option.description}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {pricing === "PAID" && (
+              {accessType === "MEMBERS" ? (
+                <div className="space-y-3 rounded-[10px] border-[0.8px] border-kv-border bg-kv-secondary/60 p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["BASIC", "PREMIUM"] as MembershipLevel[]).map((level) => {
+                      const plans = activeMembershipPlans.filter((plan) => plan.level === level);
+                      const members = plans.reduce((sum, plan) => sum + plan.memberCount, 0);
+                      const selected = requiredLevel === level;
+                      return (
+                        <button
+                          key={level}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setValue("requiredLevel", level, { shouldDirty: true })}
+                          className={cn(
+                            "rounded-lg border px-2.5 py-2 text-left text-[12px] transition",
+                            selected
+                              ? "border-zinc-900 bg-zinc-950 text-white"
+                              : "border-kv-border bg-white text-kv-secondary-fg hover:bg-kv-hover"
+                          )}
+                        >
+                          <span className="block font-medium">{MEMBERSHIP_LEVEL_LABEL[level]} and up</span>
+                          <span className={cn("mt-0.5 block text-[11px]", selected ? "text-zinc-300" : "text-kv-subtle")}>
+                            {plans.length} plan{plans.length === 1 ? "" : "s"} · {members} member{members === 1 ? "" : "s"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedLevelPlans.length === 0 ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[12px] leading-[1.45] text-amber-900">
+                      No live {MEMBERSHIP_LEVEL_LABEL[requiredLevel].toLowerCase()} plan yet, so nobody can join this course.
+                      <Button asChild type="button" variant="outline" size="sm" className="mt-2 w-full bg-white">
+                        <a href="/dashboard/membership/plans">
+                          <CreditCard className="h-4 w-4" /> Create membership plan
+                        </a>
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-[12px] leading-[1.45] text-kv-muted-fg">
+                      <Users className="mr-1 inline h-3.5 w-3.5 -translate-y-px" />
+                      Included in {selectedLevelPlans.map((plan) => plan.name).join(", ")}
+                      {selectedLevelMemberCount ? ` (${selectedLevelMemberCount} member${selectedLevelMemberCount === 1 ? "" : "s"} today)` : ""}.
+                    </p>
+                  )}
+                  <label className="flex items-center gap-2 text-[12px] text-kv-secondary-fg">
+                    <input
+                      type="checkbox"
+                      checked={pricing === "PAID"}
+                      onChange={(e) => setValue("pricing", e.target.checked ? "PAID" : "FREE", { shouldDirty: true })}
+                      className="h-3.5 w-3.5 accent-[rgb(var(--kv-fg))]"
+                    />
+                    Members also pay a price for this course
+                  </label>
+                </div>
+              ) : null}
+
+              {pricing === "PAID" ? (
                 <div className="space-y-2">
                   <Label htmlFor="price">Price</Label>
                   <Input
@@ -504,192 +619,29 @@ export function CourseForm({
                       {errors.price.message}
                     </p>
                   )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2">
-                {[99000, 199000, 499000].map((amount) => (
-                  <Button
-                    key={amount}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="px-2"
-                    onClick={() => {
-                      setValue("pricing", "PAID", { shouldDirty: true });
-                      setValue("price", String(amount), { shouldDirty: true });
-                    }}
-                  >
-                    {new Intl.NumberFormat("id-ID", {
-                      notation: "compact",
-                    }).format(amount)}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="rounded-lg border border-kv-border bg-white p-3 text-xs leading-5 text-kv-secondary-fg">
-                <div className="mb-1 flex items-center gap-2 font-medium text-kv-fg">
-                  <Tag className="h-4 w-4 text-kv-muted-fg" />
-                  Checkout price
-                </div>
-                Learners will see <span className="font-medium">{formattedPrice}</span>
-                {pricing === "PAID"
-                  ? " before enrollment."
-                  : " and can enroll without payment."}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label htmlFor="requiredLevel">Access</Label>
-                <Controller
-                  control={control}
-                  name="requiredLevel"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger id="requiredLevel">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="FREE">Everyone</SelectItem>
-                        <SelectItem value="BASIC">Basic members</SelectItem>
-                        <SelectItem value="PREMIUM">Premium members</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <p className="text-[11px] leading-4 text-kv-subtle">
-                  <LockKeyhole className="mr-1 inline h-3 w-3 -translate-y-px" />
-                  {requiredLevel === "FREE"
-                    ? "No membership required."
-                    : selectedLevelPlans.length > 0
-                      ? `${MEMBERSHIP_LEVEL_LABEL[requiredLevel]} membership required before enrollment.`
-                      : `Create an active ${MEMBERSHIP_LEVEL_LABEL[requiredLevel]} membership plan before publishing gated access.`}
-                </p>
-              </div>
-
-              <div
-                className={cn(
-                  "rounded-lg border p-3 text-xs leading-5",
-                  hasSelectedMembershipPlan
-                    ? "border-kv-border bg-kv-secondary text-kv-secondary-fg"
-                    : "border-amber-200 bg-amber-50 text-amber-900"
-                )}
-              >
-                <div className="mb-2 flex items-center gap-2 font-medium text-kv-fg">
-                  <LockKeyhole
-                    className={cn(
-                      "h-4 w-4",
-                      hasSelectedMembershipPlan
-                        ? "text-kv-muted-fg"
-                        : "text-amber-700"
-                    )}
-                  />
-                  Enrollment gate
-                </div>
-                {accessCopy}
-                {requiredLevel !== "FREE" ? (
-                  <div className="mt-3 space-y-2">
-                    {selectedLevelPlans.length > 0 ? (
-                      selectedLevelPlans.map((plan) => (
-                        <div
-                          key={plan.id}
-                          className="rounded-md border border-white/70 bg-white px-2.5 py-2 shadow-sm"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="min-w-0 truncate font-medium text-kv-fg">
-                              {plan.name}
-                            </span>
-                            <span className="shrink-0 text-kv-muted-fg">
-                              {plan.price === 0
-                                ? "Free"
-                                : new Intl.NumberFormat("id-ID", {
-                                    style: "currency",
-                                    currency: "IDR",
-                                    maximumFractionDigits: 0,
-                                  }).format(plan.price)}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center gap-1.5 text-kv-muted-fg">
-                            <Users className="h-3.5 w-3.5" />
-                            {plan.memberCount} member
-                            {plan.memberCount === 1 ? "" : "s"}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <Button asChild type="button" variant="outline" className="w-full bg-white">
-                        <a href="/dashboard/membership/plans">
-                          <CreditCard className="h-4 w-4" />
-                          Create membership plan
-                        </a>
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-3 rounded-md border border-white/70 bg-white px-2.5 py-2 shadow-sm">
-                    <div className="flex items-center gap-2 font-medium text-kv-fg">
-                      <Globe2 className="h-3.5 w-3.5 text-kv-muted-fg" />
-                      Public enrollment
-                    </div>
-                    <p className="mt-1 text-kv-muted-fg">
-                      Membership plans are bypassed for this course.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                {(["FREE", "BASIC", "PREMIUM"] as MembershipLevel[]).map(
-                  (level) => {
-                    const plans = activeMembershipPlans.filter(
-                      (plan) => plan.level === level
-                    );
-                    const members = plans.reduce(
-                      (sum, plan) => sum + plan.memberCount,
-                      0
-                    );
-                    return (
-                      <button
-                        key={level}
+                  <div className="grid grid-cols-3 gap-2">
+                    {[99000, 199000, 499000].map((amount) => (
+                      <Button
+                        key={amount}
                         type="button"
-                        onClick={() =>
-                          setValue("requiredLevel", level, {
-                            shouldDirty: true,
-                          })
-                        }
-                        className={cn(
-                          "rounded-lg border px-2 py-2 text-left transition",
-                          requiredLevel === level
-                            ? "border-zinc-900 bg-zinc-950 text-white"
-                            : "border-kv-border bg-white text-kv-secondary-fg hover:bg-kv-hover"
-                        )}
+                        variant="outline"
+                        size="sm"
+                        className="px-2"
+                        onClick={() => setValue("price", String(amount), { shouldDirty: true })}
                       >
-                        <span className="block truncate font-medium">
-                          {MEMBERSHIP_LEVEL_LABEL[level]}
-                        </span>
-                        <span
-                          className={cn(
-                            "mt-1 block",
-                            requiredLevel === level
-                              ? "text-zinc-300"
-                              : "text-kv-subtle"
-                          )}
-                        >
-                          {level === "FREE"
-                            ? "Open"
-                            : `${plans.length} plan · ${members} member`}
-                        </span>
-                      </button>
-                    );
-                  }
-                )}
-              </div>
-
-              {requiredLevel !== "FREE" && selectedLevelMemberCount === 0 ? (
-                <p className="text-[11px] leading-4 text-amber-700">
-                  No members currently match this gate. New learners must join
-                  a matching membership plan first.
+                        {new Intl.NumberFormat("id-ID", { notation: "compact" }).format(amount)}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] leading-4 text-kv-subtle">
+                    <Tag className="mr-1 inline h-3 w-3 -translate-y-px" />
+                    Learners see <span className="font-medium text-kv-secondary-fg">{formattedPrice}</span> at checkout. Access starts once payment is confirmed.
+                  </p>
+                </div>
+              ) : accessType === "FREE" ? (
+                <p className="text-[11px] leading-4 text-kv-subtle">
+                  <Globe2 className="mr-1 inline h-3 w-3 -translate-y-px" />
+                  Learners sign in and enroll instantly. Preview lessons stay open to everyone.
                 </p>
               ) : null}
 

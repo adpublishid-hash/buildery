@@ -9,6 +9,7 @@ import { canInWorkspace } from "@/lib/permissions";
 import { processOrderRefundProvider } from "@/lib/order-refunds";
 import { cancelMidtransOrderPayment } from "@/lib/payment-cancellations";
 import { reconcileMidtransPayment } from "@/lib/payment-reconciliation";
+import { isPaymentGateway, reconcileGatewayPayment } from "@/lib/integrations/payments/gateway";
 import { expireOverduePayment } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { revalidateCatalog } from "@/lib/storefront-catalog";
@@ -94,6 +95,20 @@ export async function reconcilePaymentAction(
 ): Promise<ActionResult> {
   const actor = await authorize();
   if (!actor.ok) return actor;
+
+  const gatewayPayment = await prisma.payment.findFirst({
+    where: { id: paymentId, workspaceId: actor.workspaceId },
+    select: { provider: true },
+  });
+  if (isPaymentGateway(gatewayPayment?.provider)) {
+    const synced = await reconcileGatewayPayment(paymentId, actor.workspaceId);
+    if (!synced.ok) return synced;
+    revalidateAudit(undefined, actor.workspaceId);
+    return {
+      ok: true,
+      message: RECONCILE_MESSAGE[synced.result].replace("Midtrans", "payment gateway"),
+    };
+  }
 
   const result = await reconcileMidtransPayment(paymentId, {
     workspaceId: actor.workspaceId,

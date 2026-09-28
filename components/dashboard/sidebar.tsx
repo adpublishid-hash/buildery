@@ -36,7 +36,7 @@ export function Sidebar({
   badges,
 }: Props) {
   return (
-    <aside className="flex h-full w-[250px] shrink-0 flex-col" aria-label="Utama">
+    <aside className="flex h-full w-[250px] shrink-0 flex-col" aria-label="Main">
       <div className="flex w-[250px] items-center justify-between overflow-clip px-[12px] py-[12px]">
         <Link
           href="/dashboard"
