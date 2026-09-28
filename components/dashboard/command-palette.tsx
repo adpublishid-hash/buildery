@@ -14,6 +14,7 @@ import {
   Search,
   ShoppingBag,
   Users,
+  UserCircle,
 } from "lucide-react";
 import type { Role } from "@prisma/client";
 
@@ -86,6 +87,8 @@ export function CommandPalette({ role }: { role: Role }) {
         group: "Buka",
         icon: item.icon,
       }));
+    // Personal account lives in the sidebar's account menu, not the nav.
+    nav.push({ label: "My account", href: "/dashboard/account", group: "Buka", icon: UserCircle });
     const actions: Command[] = QUICK_ACTIONS.map((a) => ({
       ...a,
       group: "Buat",

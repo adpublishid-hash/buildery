@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import type { Role } from "@prisma/client";
-import { ChevronsUpDown, Command, LogOut, PanelLeft, Search, Settings, UserCircle } from "lucide-react";
+import { ChevronsUpDown, Command, LifeBuoy, LogOut, PanelLeft, Search, Settings, UserCircle } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -26,8 +26,8 @@ export function SidebarCollapseButton() {
     <button
       type="button"
       onClick={hideSidebar}
-      aria-label="Tutup sidebar"
-      title="Tutup sidebar"
+      aria-label="Hide sidebar"
+      title="Hide sidebar"
       className="-m-[4px] rounded-md p-[4px] text-kv-secondary-fg outline-none transition-colors hover:bg-black/[0.05] focus-visible:ring-[3px] focus-visible:ring-kv-ring/40"
     >
       <PanelLeft className="h-[16px] w-[16px]" strokeWidth={1.6} />
@@ -48,7 +48,7 @@ export function SidebarSearch() {
     >
       <Search className="h-[16px] w-[16px] shrink-0 text-kv-secondary-fg" strokeWidth={1.6} />
       <span className="min-w-0 flex-1 truncate text-[13px] leading-none text-kv-muted-fg">
-        Cari apa saja
+        Search anything
       </span>
       <span aria-hidden className="flex shrink-0 items-center text-[#565d76]">
         <span className="flex h-[16px] w-[16px] items-center justify-center rounded p-[2px]">
@@ -93,7 +93,7 @@ export function SidebarAccount({
             </span>
           </span>
           <span className="flex min-w-0 flex-1 flex-col justify-center gap-[4px] whitespace-nowrap leading-none">
-            <span className="truncate text-[13px] font-medium text-kv-fg">{name ?? "Pengguna"}</span>
+            <span className="truncate text-[13px] font-medium text-kv-fg">{name ?? "User"}</span>
             <span className="truncate text-[12px] text-kv-subtle">{email ?? ROLE_LABEL[role]}</span>
           </span>
           <ChevronsUpDown
@@ -106,12 +106,17 @@ export function SidebarAccount({
         <DropdownMenuLabel>{ROLE_LABEL[role]}</DropdownMenuLabel>
         <DropdownMenuItem asChild>
           <Link href="/dashboard/account">
-            <UserCircle /> Akun saya
+            <UserCircle /> My account
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/dashboard/settings">
-            <Settings /> Pengaturan
+            <Settings /> Settings
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/dashboard/support">
+            <LifeBuoy /> Help & support
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -119,7 +124,7 @@ export function SidebarAccount({
           data-variant="destructive"
           onSelect={() => void signOut({ callbackUrl: "/login" })}
         >
-          <LogOut /> Keluar
+          <LogOut /> Log out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
+  Bell,
   Boxes,
   ClipboardList,
   CreditCard,
@@ -27,7 +28,6 @@ import {
   ShieldAlert,
   Ticket,
   Timer,
-  UserCircle,
   Users,
   Wallet,
 } from "lucide-react";
@@ -40,21 +40,35 @@ export type NavItem = {
   icon: LucideIcon;
   permission?: Permission;
   children?: NavItem[];
+  /**
+   * The href's query is also what the page shows when the URL leaves it out
+   * (the settings page opens on its first tab), so a bare URL matches too.
+   */
+  isDefault?: boolean;
 };
 
 export type NavSection = {
+  /** Accessible name for the group; the sidebar separates groups with a rule, not a heading. */
   label: string;
-  /** Pinned to the foot of the sidebar in quieter text (Kravio's "Support"). */
+  /** Pinned to the foot of the sidebar in quieter text. */
   bottom?: boolean;
   items: NavItem[];
 };
 
+/**
+ * The dashboard menu, grouped by what the operator is doing:
+ *
+ * 1. Core — daily check-in: overview, inbox, and the numbers.
+ * 2. Business — the things being sold or published, each a collapsible group.
+ * 3. Tools — standalone features that serve every business line.
+ * 4. Workspace — how the site looks and is wired up, pinned at the bottom.
+ */
 export const dashboardNav: NavSection[] = [
   {
-    label: "Menu Utama",
+    label: "Core",
     items: [
       {
-        label: "Ringkasan",
+        label: "Overview",
         href: "/dashboard",
         icon: LayoutDashboard,
         permission: "dashboard.view",
@@ -65,6 +79,57 @@ export const dashboardNav: NavSection[] = [
         icon: Inbox,
         permission: "sites.view",
       },
+      {
+        label: "Analytics",
+        href: "/dashboard/analytics",
+        icon: BarChart3,
+        permission: "dashboard.view",
+        children: [
+          {
+            label: "Traffic",
+            href: "/dashboard/analytics",
+            icon: Eye,
+            permission: "dashboard.view",
+          },
+          {
+            label: "Ad campaigns",
+            href: "/dashboard/analytics/campaigns",
+            icon: Megaphone,
+            permission: "dashboard.view",
+          },
+        ],
+      },
+      {
+        label: "Payments",
+        href: "/dashboard/payments",
+        icon: Wallet,
+        permission: "billing.view",
+        children: [
+          {
+            label: "Transactions",
+            href: "/dashboard/payments",
+            icon: Wallet,
+            permission: "billing.view",
+          },
+          {
+            label: "Tax report",
+            href: "/dashboard/payments/tax",
+            icon: ReceiptText,
+            permission: "billing.view",
+          },
+          {
+            label: "Payment audit",
+            href: "/dashboard/payments/audit",
+            icon: ShieldAlert,
+            permission: "billing.manage",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
       {
         label: "eCommerce",
         href: "/dashboard/ecommerce",
@@ -90,9 +155,15 @@ export const dashboardNav: NavSection[] = [
             permission: "sites.view",
           },
           {
-            label: "Discounts",
+            label: "Promotions",
             href: "/dashboard/coupons",
             icon: Ticket,
+            permission: "sites.view",
+          },
+          {
+            label: "Funnels",
+            href: "/dashboard/funnels",
+            icon: Filter,
             permission: "sites.view",
           },
           {
@@ -108,13 +179,7 @@ export const dashboardNav: NavSection[] = [
             permission: "sites.view",
           },
           {
-            label: "Funnels",
-            href: "/dashboard/funnels",
-            icon: Filter,
-            permission: "sites.view",
-          },
-          {
-            label: "Pengaturan",
+            label: "Settings",
             href: "/dashboard/settings?tab=ecommerce",
             icon: Settings,
             permission: "sites.view",
@@ -122,34 +187,27 @@ export const dashboardNav: NavSection[] = [
         ],
       },
       {
-        label: "Konten",
+        label: "Content",
         href: "/dashboard/pages",
         icon: FileText,
         permission: "sites.view",
         children: [
           {
-            label: "Halaman",
+            label: "Pages",
             href: "/dashboard/pages",
             icon: FileText,
             permission: "sites.view",
           },
           {
-            label: "Blog",
+            label: "Posts",
             href: "/dashboard/blog",
             icon: Newspaper,
             permission: "sites.view",
           },
           {
-            label: "Form",
-            href: "/dashboard/forms",
-            icon: ClipboardList,
-            permission: "sites.view",
-          },
-          {
-            label: "Tema",
-            href: "/dashboard/theme",
-            icon: Palette,
-            permission: "sites.view",
+            label: "Media",
+            href: "/dashboard/media",
+            icon: ImageIcon,
           },
         ],
       },
@@ -160,7 +218,7 @@ export const dashboardNav: NavSection[] = [
         permission: "sites.view",
         children: [
           {
-            label: "Kursus",
+            label: "Courses",
             href: "/dashboard/courses",
             icon: GraduationCap,
             permission: "sites.view",
@@ -173,60 +231,22 @@ export const dashboardNav: NavSection[] = [
           },
         ],
       },
-      {
-        label: "Afiliasi",
-        href: "/dashboard/affiliate",
-        icon: Handshake,
-        permission: "affiliate.view",
-      },
     ],
   },
   {
-    label: "Analitik & Insight",
+    label: "Tools",
     items: [
       {
-        label: "Analitik",
-        href: "/dashboard/analytics",
-        icon: BarChart3,
-        permission: "dashboard.view",
-        children: [
-          {
-            label: "Traffic",
-            href: "/dashboard/analytics",
-            icon: Eye,
-            permission: "dashboard.view",
-          },
-          {
-            label: "Kampanye Iklan",
-            href: "/dashboard/analytics/campaigns",
-            icon: Megaphone,
-            permission: "dashboard.view",
-          },
-          {
-            label: "Pembayaran",
-            href: "/dashboard/payments",
-            icon: Wallet,
-            permission: "billing.view",
-          },
-          {
-            label: "Laporan Pajak",
-            href: "/dashboard/payments/tax",
-            icon: ReceiptText,
-            permission: "billing.view",
-          },
-          {
-            label: "Payment Audit",
-            href: "/dashboard/payments/audit",
-            icon: ShieldAlert,
-            permission: "billing.manage",
-          },
-          {
-            label: "Job Runner",
-            href: "/dashboard/system/jobs",
-            icon: Timer,
-            permission: "billing.manage",
-          },
-        ],
+        label: "Forms",
+        href: "/dashboard/forms",
+        icon: ClipboardList,
+        permission: "sites.view",
+      },
+      {
+        label: "Affiliates",
+        href: "/dashboard/affiliate",
+        icon: Handshake,
+        permission: "affiliate.view",
       },
     ],
   },
@@ -235,62 +255,68 @@ export const dashboardNav: NavSection[] = [
     bottom: true,
     items: [
       {
-        label: "Workspace",
-        href: "/dashboard/workspaces",
-        icon: Boxes,
-        permission: "workspaces.view",
+        label: "Appearance",
+        href: "/dashboard/theme",
+        icon: Palette,
+        permission: "sites.view",
       },
       {
-        label: "Pengguna",
-        href: "/dashboard/users",
-        icon: Users,
-        permission: "users.view",
+        label: "Integrations",
+        href: "/dashboard/settings/integrations",
+        icon: Plug,
+      },
+      {
+        label: "Notifications",
+        href: "/dashboard/settings?tab=sales-notif",
+        icon: Bell,
+      },
+      {
+        label: "Settings",
+        href: "/dashboard/settings",
+        icon: Settings,
+        children: [
+          {
+            label: "General",
+            href: "/dashboard/settings?tab=umum",
+            icon: Settings,
+            isDefault: true,
+          },
+          {
+            label: "Team",
+            href: "/dashboard/users",
+            icon: Users,
+            permission: "users.view",
+          },
+          {
+            label: "Workspaces",
+            href: "/dashboard/workspaces",
+            icon: Boxes,
+            permission: "workspaces.view",
+          },
+          {
+            label: "Billing",
+            href: "/dashboard/billing",
+            icon: CreditCard,
+            permission: "billing.view",
+          },
+          {
+            label: "Job runner",
+            href: "/dashboard/system/jobs",
+            icon: Timer,
+            permission: "billing.manage",
+          },
+          {
+            label: "Help",
+            href: "/dashboard/support",
+            icon: LifeBuoy,
+          },
+        ],
       },
       {
         label: "Super Admin",
         href: "/admin",
         icon: ShieldCheck,
         permission: "users.manage",
-      },
-      {
-        label: "Pengaturan",
-        href: "/dashboard/settings",
-        icon: Settings,
-        children: [
-          {
-            label: "Workspace",
-            href: "/dashboard/settings?tab=umum",
-            icon: Settings,
-          },
-          {
-            label: "Integrasi",
-            href: "/dashboard/settings/integrations",
-            icon: Plug,
-          },
-          {
-            label: "Media",
-            href: "/dashboard/media",
-            icon: ImageIcon,
-          },
-          {
-            // Akun pribadi, bukan workspace: nama dan password milik pengguna
-            // yang sedang masuk.
-            label: "Akun saya",
-            href: "/dashboard/account",
-            icon: UserCircle,
-          },
-        ],
-      },
-      {
-        label: "Billing",
-        href: "/dashboard/billing",
-        icon: CreditCard,
-        permission: "billing.view",
-      },
-      {
-        label: "Bantuan",
-        href: "/dashboard/support",
-        icon: LifeBuoy,
       },
     ],
   },
