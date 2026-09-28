@@ -173,7 +173,14 @@ export function IntegrationsForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
-  const [tab, setTab] = useState<IntegrationTab>("ringkasan");
+  // The integrations catalog links here with ?section=<tab> to open one panel.
+  const sectionParam = searchParams?.get("section");
+  const [tab, setTab] = useState<IntegrationTab>(() =>
+    INTEGRATION_TABS.some((item) => item.key === sectionParam) ? (sectionParam as IntegrationTab) : "ringkasan"
+  );
+  useEffect(() => {
+    if (INTEGRATION_TABS.some((item) => item.key === sectionParam)) setTab(sectionParam as IntegrationTab);
+  }, [sectionParam]);
   const [serverError, setServerError] = useState<string | null>(null);
   const [whatsappIsActive, setWhatsappIsActive] = useState(
     defaultValues.whatsappIsActive

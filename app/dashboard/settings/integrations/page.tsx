@@ -15,6 +15,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { IntegrationsForm } from "@/components/settings/integrations-form";
+import { IntegrationCatalog } from "@/components/integrations/integration-catalog";
+import { listConnectionViews } from "@/lib/integrations/connections";
 import { INTEGRATION_SECRET_FIELDS } from "@/lib/integration-secrets";
 import { secretHint } from "@/lib/secret-fields";
 
@@ -34,7 +36,7 @@ export default async function IntegrationsSettingsPage() {
     ""
   )}/api/integrations/gmail/oauth/callback`;
 
-  const [integration, metaCapiStatus, tiktokStatus, ga4Status, catalog, adPixels] = await Promise.all([
+  const [integration, metaCapiStatus, tiktokStatus, ga4Status, catalog, adPixels, connections, ecommerce] = await Promise.all([
     prisma.integrationSetting.findUnique({
       where: { workspaceId: workspace.id },
     }),
@@ -58,11 +60,32 @@ export default async function IntegrationsSettingsPage() {
         isActive: true,
       },
     }),
+    listConnectionViews(workspace.id),
+    prisma.ecommerceSetting.findUnique({
+      where: { workspaceId: workspace.id },
+      select: { midtransEnabled: true, midtransServerKey: true, rajaOngkirApiKey: true },
+    }),
   ]);
+
+  // Providers configured in the older forms, shown in the catalog by status.
+  const on = (value: unknown) => (value ? ("connected" as const) : ("off" as const));
+  const builtIn: Record<string, "connected" | "off"> = {
+    mailketing: on(integration?.mailketingEnabled && integration.mailketingApiToken),
+    gmail: on(integration?.gmailOAuthEnabled && integration.gmailRefreshToken),
+    midtrans: on(ecommerce?.midtransEnabled && ecommerce.midtransServerKey),
+    rajaongkir: on(ecommerce?.rajaOngkirApiKey),
+    meta: on(integration?.metaPixelId),
+    tiktok: on(integration?.tiktokPixelId),
+    google: on(integration?.googleAnalyticsId || integration?.googleTagManagerId || integration?.googleAdsConversionId),
+    ...(integration?.whatsappProvider && integration.whatsappIsActive
+      ? { [`whatsapp:${integration.whatsappProvider}`]: "connected" as const }
+      : {}),
+  };
 
   return (
     <div className="min-w-0 space-y-6">
-      <Card className="overflow-hidden rounded-2xl border-zinc-200 shadow-sm dark:border-zinc-800">
+      <IntegrationCatalog connections={connections} builtIn={builtIn} canEdit={canEdit} />
+      <Card id="integrations-form" className="scroll-mt-20 overflow-hidden rounded-2xl border-zinc-200 shadow-sm dark:border-zinc-800">
         <CardHeader className="border-b border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/30">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:text-zinc-200 dark:ring-zinc-800">

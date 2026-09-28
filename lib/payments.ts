@@ -11,6 +11,7 @@ import { readStoredAdContext, sendWorkspaceAdEvent } from "@/lib/ad-events";
 import { splitName } from "@/lib/ad-match";
 import { catalogItemId, DEFAULT_AD_CURRENCY } from "@/lib/ad-catalog";
 import { blendedRateBps, percentToBps } from "@/lib/affiliate-rates";
+import { syncNewsletterContact } from "@/lib/integrations/email/send";
 import { publicSiteHref } from "@/lib/public-url";
 import {
   queueCourseEmailNotification,
@@ -133,7 +134,26 @@ export async function applyPaymentStatus(
     { isolationLevel: "Serializable" }
   );
   for (const effect of result.afterCommit) effect();
+  if (result.changed && newStatus === "PAID") {
+    void syncBuyerToNewsletter(paymentId).catch((error) => console.warn("Newsletter sync after payment failed", error));
+  }
   return { changed: result.changed, payment: result.payment };
+}
+
+/** Adds a paying customer to connected newsletter lists (Brevo, Listmonk). */
+async function syncBuyerToNewsletter(paymentId: string) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: {
+      workspaceId: true,
+      order: { select: { customer: { select: { email: true, name: true } } } },
+      enrollment: { select: { customer: { select: { email: true, name: true } } } },
+      customerMembership: { select: { customer: { select: { email: true, name: true } } } },
+    },
+  });
+  const customer = payment?.order?.customer ?? payment?.enrollment?.customer ?? payment?.customerMembership?.customer;
+  if (!payment || !customer) return;
+  await syncNewsletterContact(payment.workspaceId, customer);
 }
 
 /**

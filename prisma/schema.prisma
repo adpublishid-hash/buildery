@@ -272,6 +272,20 @@ enum InboxMessageStatus {
   FAILED
 }
 
+/// A family of third-party services a workspace can connect.
+enum IntegrationCategory {
+  EMAIL
+  PAYMENT
+  INBOX
+  SHIPPING
+}
+
+enum IntegrationStatus {
+  UNTESTED
+  CONNECTED
+  ERROR
+}
+
 enum WhatsAppProvider {
   ONESENDER
   WABA
@@ -813,6 +827,7 @@ model Workspace {
   membershipGrants       MembershipGrant[]
   membershipEvents       MembershipEvent[]
   integration            IntegrationSetting?
+  integrationConnections IntegrationConnection[]
   reports                AbuseReport[]
   payments               Payment[]
   refunds                OrderRefund[]
@@ -3627,6 +3642,39 @@ model IntegrationSetting {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   oneSenderEnabled Boolean  @default(false)
+}
+
+/// One connected third-party provider (Resend, Xendit, KiriminAja, …).
+/// Which fields exist is defined by the provider registry in code
+/// (lib/integrations/registry.ts); secrets are stored encrypted, never in
+/// `config`, and never sent to the browser.
+model IntegrationConnection {
+  id           String              @id @default(cuid())
+  workspaceId  String
+  category     IntegrationCategory
+  /// Registry id, e.g. "resend", "xendit", "kiriminaja".
+  provider     String
+  enabled      Boolean             @default(false)
+  /// The provider used by default within its category (e.g. the checkout gateway).
+  isPrimary    Boolean             @default(false)
+  /// Non-secret settings, validated against the registry.
+  config       Json                @default("{}")
+  /// AES-256-GCM encrypted JSON of secret fields.
+  secrets      String?             @db.Text
+  /// Random, unguessable id that routes inbound webhooks to this connection.
+  webhookKey   String              @unique
+  status       IntegrationStatus   @default(UNTESTED)
+  lastTestedAt DateTime?
+  lastError    String?             @db.Text
+  lastEventAt  DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId, category])
 }
 
 // ============================================================
