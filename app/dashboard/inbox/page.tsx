@@ -10,9 +10,11 @@ import {
   loadInboxConversation,
   MESSAGE_PAGE_SIZE,
   resolveInboxAssigneeFilter,
+  resolveInboxChannelFilter,
   resolveInboxStatusFilter,
   serviceWindow,
 } from "@/lib/inbox";
+import { CHANNEL_PROVIDER } from "@/lib/integrations/inbox/channel-map";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentWorkspace } from "@/lib/workspace";
 
@@ -24,6 +26,7 @@ type SearchParams = {
   q?: string | string[];
   status?: string | string[];
   assignee?: string | string[];
+  channel?: string | string[];
   show?: string | string[];
   msgs?: string | string[];
   c?: string | string[];
@@ -47,17 +50,19 @@ export default async function InboxPage({
 
   const status = resolveInboxStatusFilter(searchParams?.status);
   const assignee = resolveInboxAssigneeFilter(searchParams?.assignee);
+  const channel = resolveInboxChannelFilter(searchParams?.channel);
   const q = (one(searchParams?.q) ?? "").slice(0, 120);
   const show = positiveInt(searchParams?.show, CONVERSATION_PAGE_SIZE);
   const msgs = positiveInt(searchParams?.msgs, MESSAGE_PAGE_SIZE);
   const requestedId = one(searchParams?.c) ?? null;
 
-  const [list, counts, integration, context, requestedThread] = await Promise.all([
+  const [list, counts, integration, context, requestedThread, channelConnections] = await Promise.all([
     listInboxConversations({
       workspaceId: workspace.id,
       q,
       status,
       assignee,
+      channel,
       viewerId: user.id,
       take: show,
     }),
@@ -78,7 +83,23 @@ export default async function InboxPage({
           take: msgs,
         })
       : Promise.resolve(null),
+    prisma.integrationConnection.findMany({
+      where: { workspaceId: workspace.id, category: "INBOX" },
+      select: { provider: true, enabled: true },
+    }),
   ]);
+
+  // Which channels can deliver a reply right now.
+  const enabledProviders = new Set(
+    channelConnections.filter((row) => row.enabled).map((row) => row.provider)
+  );
+  const channels = {
+    WHATSAPP: Boolean(integration?.whatsappIsActive),
+    TELEGRAM: enabledProviders.has(CHANNEL_PROVIDER.TELEGRAM),
+    MESSENGER: enabledProviders.has(CHANNEL_PROVIDER.MESSENGER),
+    INSTAGRAM: enabledProviders.has(CHANNEL_PROVIDER.INSTAGRAM),
+    WEBCHAT: enabledProviders.has(CHANNEL_PROVIDER.WEBCHAT),
+  };
 
   // No conversation asked for (or one that no longer exists): open the first
   // of the current list, so the panel is never empty while messages exist.
@@ -108,15 +129,17 @@ export default async function InboxPage({
       customer={customer}
       context={context}
       integration={integration}
+      channels={channels}
       window={
         thread
           ? serviceWindow({
+              channel: thread.conversation.channel,
               provider: integration?.whatsappProvider ?? null,
               lastInboundAt: thread.conversation.lastInboundAt,
             })
           : null
       }
-      filters={{ q, status, assignee }}
+      filters={{ q, status, assignee, channel }}
     />
   );
 }

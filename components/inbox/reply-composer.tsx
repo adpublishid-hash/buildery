@@ -21,12 +21,14 @@ import { cn } from "@/lib/utils";
  */
 export function ReplyComposer({
   conversationId,
+  channelLabel,
   enabled,
   window: serviceWindow,
   quickReplies,
   onSent,
 }: {
   conversationId: string;
+  channelLabel: string;
   enabled: boolean;
   window: ServiceWindow | null;
   quickReplies: InboxWorkspaceContext["quickReplies"];
@@ -69,7 +71,7 @@ export function ReplyComposer({
         <div className="flex items-start gap-[8px] border-b-[0.8px] border-kv-border bg-amber-50/60 px-[14px] py-[8px] text-[12px] leading-[1.5] text-amber-900">
           <span className="mt-[6px] h-[6px] w-[6px] shrink-0 rounded-full bg-amber-500" />
           <span>
-          Provider WhatsApp belum aktif, jadi balasan tidak bisa dikirim.{" "}
+          {channelLabel} belum aktif, jadi balasan tidak bisa dikirim.{" "}
           <Link href="/dashboard/settings/integrations" className="font-medium underline underline-offset-2">
             Aktifkan di Pengaturan → Integrasi
           </Link>
@@ -82,14 +84,19 @@ export function ReplyComposer({
         <div className="flex items-start gap-[8px] border-b-[0.8px] border-kv-border bg-amber-50/60 px-[14px] py-[8px] text-[12px] leading-[1.5] text-amber-900">
           <span className="mt-[6px] h-[6px] w-[6px] shrink-0 rounded-full bg-amber-500" />
           <span>
-          Jendela 24 jam WhatsApp sudah lewat
+          Jendela 24 jam {channelLabel} sudah lewat
           {serviceWindow?.expiresAt ? (
             <RelativeExpiry expiresAt={serviceWindow.expiresAt} />
           ) : null}
-          . WhatsApp menolak balasan bebas sampai pelanggan menulis lagi — kirim{" "}
-          <Link href="/dashboard/settings/integrations" className="font-medium underline underline-offset-2">
-            template yang sudah disetujui
-          </Link>
+          . {channelLabel} menolak balasan bebas sampai pelanggan menulis lagi
+          {channelLabel === "WhatsApp" ? (
+            <>
+              {" "}— kirim{" "}
+              <Link href="/dashboard/settings/integrations" className="font-medium underline underline-offset-2">
+                template yang sudah disetujui
+              </Link>
+            </>
+          ) : null}
           .
           </span>
         </div>
@@ -157,9 +164,9 @@ export function ReplyComposer({
               ? "Tunggu pelanggan menulis lagi, atau kirim template."
               : enabled
                 ? "Tulis balasan…"
-                : "Aktifkan integrasi WhatsApp sebelum mengirim balasan..."
+                : `Aktifkan ${channelLabel} sebelum mengirim balasan...`
           }
-          aria-label="Balasan WhatsApp"
+          aria-label={`Balasan ${channelLabel}`}
         />
         <div className="flex items-center gap-[8px] border-t-[0.8px] border-kv-border px-[8px] py-[6px]">
           <div className="flex min-w-0 flex-1 items-center gap-[8px]">

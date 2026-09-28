@@ -13,6 +13,7 @@ import {
   deleteInboxNoteAction,
   toggleInboxLabelAction,
 } from "@/lib/actions/inbox";
+import type { InboxChannel } from "@prisma/client";
 import type { InboxCustomerContext, InboxThread, InboxWorkspaceContext } from "@/lib/inbox";
 import { cn, formatDate, formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -61,7 +62,7 @@ export function ConversationPanel({
         all={context.labels}
         onChanged={onChanged}
       />
-      <CustomerCard phone={conversation.contactPhone} customer={customer} />
+      <CustomerCard phone={conversation.contactPhone} channel={conversation.channel} customer={customer} />
       <Notes
         conversationId={conversation.id}
         notes={conversation.notes}
@@ -267,17 +268,22 @@ function NewLabelForm({ onCreated }: { onCreated: (labelId: string) => void }) {
 
 function CustomerCard({
   phone,
+  channel,
   customer,
 }: {
   phone: string;
+  channel: InboxChannel;
   customer: InboxCustomerContext | null;
 }) {
   if (!customer) {
     return (
       <Section icon={ShoppingBag} title="Pelanggan">
         <p className="text-xs leading-5 text-kv-muted-fg">
-          Nomor {phone} belum cocok dengan pelanggan mana pun. Nomor akan
-          tertaut otomatis setelah mereka checkout dengan nomor ini.
+          {channel === "WHATSAPP"
+            ? `Nomor ${phone} belum cocok dengan pelanggan mana pun. Nomor akan tertaut otomatis setelah mereka checkout dengan nomor ini.`
+            : channel === "WEBCHAT"
+              ? "Belum cocok dengan pelanggan. Pengunjung yang mengisi email di chat akan tertaut ke pelanggan dengan email yang sama."
+              : "Channel ini tidak membagikan nomor atau email, jadi percakapan belum bisa ditautkan ke pelanggan."}
         </p>
       </Section>
     );

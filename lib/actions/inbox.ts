@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import type {
+  InboxChannel,
   InboxConversationStatus,
   InboxMessageKind,
   WhatsAppProvider,
@@ -12,6 +13,8 @@ import type {
 import { auth } from "@/lib/auth";
 import { normalizeInboxPhone, serviceWindow } from "@/lib/inbox";
 import { attachmentLabel } from "@/lib/whatsapp/inbox-parse";
+import { getConnection } from "@/lib/integrations/connections";
+import { CHANNEL_LABEL, CHANNEL_PROVIDER } from "@/lib/integrations/inbox/channel-map";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { canInWorkspace } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -51,7 +54,7 @@ export type ReceiveInboxResult =
   | { status: "duplicate"; conversationId: string };
 
 /**
- * Records one inbound WhatsApp message.
+ * Records one inbound message from any inbox channel.
  *
  * Providers retry a webhook they did not see a 2xx for, so the same message can
  * arrive several times. `providerMessageId` makes that harmless: a repeat is
@@ -60,8 +63,10 @@ export type ReceiveInboxResult =
  */
 export async function receiveInboxMessage({
   workspaceId,
+  channel = "WHATSAPP",
   phone,
   name,
+  email = null,
   body,
   provider,
   providerMessageId,
@@ -71,8 +76,12 @@ export async function receiveInboxMessage({
   mediaFilename = null,
 }: {
   workspaceId: string;
+  channel?: InboxChannel;
+  /** The phone number for WhatsApp; the channel's own contact id otherwise. */
   phone: string;
   name?: string | null;
+  /** Web chat visitors may leave one; it links them to a known customer. */
+  email?: string | null;
   body: string;
   provider?: WhatsAppProvider | null;
   providerMessageId?: string | null;
@@ -81,7 +90,9 @@ export async function receiveInboxMessage({
   mediaMimeType?: string | null;
   mediaFilename?: string | null;
 }): Promise<ReceiveInboxResult> {
-  const contactPhone = normalizeInboxPhone(phone);
+  const contactPhone =
+    channel === "WHATSAPP" ? normalizeInboxPhone(phone) : phone.trim().slice(0, 120);
+  const contactEmail = email?.trim().toLowerCase().slice(0, 200) || null;
   const messageBody = body.trim();
   // A photo sent without a caption is still a message; only a payload with
   // neither text nor an attachment is meaningless.
@@ -104,24 +115,35 @@ export async function receiveInboxMessage({
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const customer = await tx.customer.findFirst({
-        where: {
-          workspaceId,
-          OR: [{ phone: contactPhone }, { phone: `+${contactPhone}` }],
-        },
-        select: { id: true, name: true },
-      });
+      // Only a phone number or an email the contact gave us can name a
+      // customer; a Telegram chat id or a Page-scoped id cannot.
+      const customer =
+        channel === "WHATSAPP"
+          ? await tx.customer.findFirst({
+              where: {
+                workspaceId,
+                OR: [{ phone: contactPhone }, { phone: `+${contactPhone}` }],
+              },
+              select: { id: true, name: true },
+            })
+          : contactEmail
+            ? await tx.customer.findFirst({
+                where: { workspaceId, email: { equals: contactEmail, mode: "insensitive" } },
+                select: { id: true, name: true },
+              })
+            : null;
 
       const conversation = await tx.inboxConversation.upsert({
         where: {
           workspaceId_channel_contactPhone: {
             workspaceId,
-            channel: "WHATSAPP",
+            channel,
             contactPhone,
           },
         },
         update: {
           customerId: customer?.id ?? undefined,
+          contactEmail: contactEmail ?? undefined,
           contactName: name?.trim() || customer?.name || undefined,
           status: "OPEN",
           lastMessagePreview: preview(previewText),
@@ -133,8 +155,9 @@ export async function receiveInboxMessage({
         create: {
           workspaceId,
           customerId: customer?.id,
-          channel: "WHATSAPP",
+          channel,
           contactPhone,
+          contactEmail,
           contactName: name?.trim() || customer?.name || null,
           status: "OPEN",
           lastMessagePreview: preview(previewText),
@@ -231,10 +254,14 @@ export async function sendInboxReplyAction(
 
   const conversation = await prisma.inboxConversation.findUnique({
     where: { id: conversationId },
-    select: { id: true, workspaceId: true, lastInboundAt: true },
+    select: { id: true, workspaceId: true, lastInboundAt: true, channel: true },
   });
   if (!conversation || conversation.workspaceId !== workspace.id) {
     return { ok: false, error: "Conversation not found." };
+  }
+
+  if (conversation.channel !== "WHATSAPP") {
+    return queueChannelReply(workspace.id, userId, conversation, body);
   }
 
   const integration = await prisma.integrationSetting.findUnique({
@@ -302,6 +329,74 @@ export async function sendInboxReplyAction(
 
   revalidateInbox();
   return { ok: true };
+}
+
+/**
+ * A reply on Telegram, Messenger, Instagram or web chat. Web chat has no
+ * provider: the visitor's widget polls, so the message is delivered as soon as
+ * it is stored. The others go through the same send job as WhatsApp.
+ */
+async function queueChannelReply(
+  workspaceId: string,
+  userId: string,
+  conversation: { id: string; lastInboundAt: Date | null; channel: InboxChannel },
+  body: string
+): Promise<ActionResult> {
+  const channel = conversation.channel as Exclude<InboxChannel, "WHATSAPP">;
+  const connection = await getConnection(workspaceId, CHANNEL_PROVIDER[channel]);
+  const active = Boolean(connection?.enabled);
+  const label = CHANNEL_LABEL[channel];
+
+  const window = serviceWindow({ channel, provider: null, lastInboundAt: conversation.lastInboundAt });
+  if (window.enforced && !window.open) {
+    return {
+      ok: false,
+      error: `Jendela 24 jam ${label} sudah lewat. ${label} menolak balasan sampai pelanggan menulis lagi.`,
+    };
+  }
+
+  const webchat = channel === "WEBCHAT";
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    const message = await tx.inboxMessage.create({
+      data: {
+        workspaceId,
+        conversationId: conversation.id,
+        direction: "OUTBOUND",
+        status: !active ? "FAILED" : webchat ? "SENT" : "QUEUED",
+        body,
+        authorId: userId,
+        sentAt: active && webchat ? now : null,
+        errorMessage: active ? null : `Aktifkan ${label} di Pengaturan → Integrasi sebelum mengirim.`,
+      },
+    });
+
+    await tx.inboxConversation.update({
+      where: { id: conversation.id },
+      data: {
+        status: "PENDING",
+        lastMessagePreview: preview(body),
+        lastMessageAt: now,
+        unreadCount: 0,
+      },
+    });
+
+    if (active && !webchat) {
+      // One send job for every channel; it dispatches on the conversation.
+      await enqueueJob(
+        {
+          kind: "WHATSAPP_SEND",
+          workspaceId,
+          payload: { messageId: message.id },
+          dedupeKey: `whatsapp-send:${message.id}`,
+        },
+        tx
+      );
+    }
+  });
+
+  revalidateInbox();
+  return active ? { ok: true } : { ok: false, error: `${label} belum aktif. Pesan disimpan sebagai gagal.` };
 }
 
 export async function updateInboxConversationStatusAction(

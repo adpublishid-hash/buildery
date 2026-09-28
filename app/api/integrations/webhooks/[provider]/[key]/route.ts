@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getConnectionByWebhookKey } from "@/lib/integrations/connections";
+import { handleInboxVerification, handleInboxWebhook } from "@/lib/integrations/inbox/channels";
 import { handlePaymentWebhook } from "@/lib/integrations/payments/gateway";
 import { rateLimitByIp } from "@/lib/rate-limit";
 
@@ -33,7 +34,23 @@ export async function POST(req: Request, { params }: Params) {
       const result = await handlePaymentWebhook(connection, rawBody, req.headers);
       return NextResponse.json(result.body, { status: result.status });
     }
+    case "INBOX": {
+      const result = await handleInboxWebhook(connection, rawBody, req.headers);
+      return NextResponse.json(result.body, { status: result.status });
+    }
     default:
       return NextResponse.json({ error: "This integration does not accept webhooks." }, { status: 404 });
   }
+}
+
+/** Meta (Messenger, Instagram) confirms a webhook URL with a GET handshake. */
+export async function GET(req: Request, { params }: Params) {
+  const connection = await getConnectionByWebhookKey(params.provider, params.key);
+  if (!connection || connection.provider.category !== "INBOX") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const result = handleInboxVerification(connection, new URL(req.url));
+  return typeof result.body === "string"
+    ? new NextResponse(result.body, { status: result.status, headers: { "Content-Type": "text/plain" } })
+    : NextResponse.json(result.body, { status: result.status });
 }

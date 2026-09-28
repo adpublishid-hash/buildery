@@ -55,7 +55,7 @@ export const SCHEDULED_JOB_DESCRIPTION: Record<ScheduledJobKind, string> = {
   AFFILIATE_LIFECYCLE_SWEEP: "Menyetujui komisi yang melewati masa hold dan menganonimkan metadata klik lama.",
   WORKSPACE_LIFECYCLE_SWEEP: "Mengakhiri undangan kedaluwarsa dan menghapus workspace setelah masa pemulihan.",
   SAAS_BILLING_SWEEP: "Menutup masa aktif langganan yang jatuh tempo, melepas kode unik kedaluwarsa, dan mengirim pengingat perpanjangan.",
-  WHATSAPP_SEND: "Mengirim satu balasan WhatsApp yang ditulis operator di Inbox.",
+  WHATSAPP_SEND: "Mengirim satu balasan yang ditulis operator di Inbox (WhatsApp, Telegram, Messenger, Instagram).",
   ABANDONED_SCAN: "Digantikan oleh Abandoned checkout sweep.",
   ABANDONED_RECOVERY: "Digantikan oleh Abandoned checkout sweep.",
   NOTIFICATION_RETRY: "Digantikan oleh Store notification retry.",

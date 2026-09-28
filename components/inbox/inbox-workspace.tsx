@@ -17,7 +17,7 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
-import type { InboxConversationStatus, IntegrationSetting } from "@prisma/client";
+import type { InboxChannel, InboxConversationStatus, IntegrationSetting } from "@prisma/client";
 import { toast } from "sonner";
 
 import {
@@ -29,6 +29,7 @@ import {
 } from "@/lib/actions/inbox";
 import type {
   InboxAssigneeFilter,
+  InboxChannelFilter,
   InboxConversationListItem,
   InboxCustomerContext,
   InboxStatusFilter,
@@ -36,6 +37,7 @@ import type {
   InboxWorkspaceContext,
   ServiceWindow,
 } from "@/lib/inbox";
+import { CHANNEL_LABEL, INBOX_CHANNELS } from "@/lib/integrations/inbox/channel-map";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,8 +76,10 @@ type Props = {
     IntegrationSetting,
     "whatsappProvider" | "whatsappIsActive" | "whatsappSenderNumber"
   > | null;
+  /** Whether each channel can deliver a reply right now. */
+  channels: Record<InboxChannel, boolean>;
   window: ServiceWindow | null;
-  filters: { q: string; status: InboxStatusFilter; assignee: InboxAssigneeFilter };
+  filters: { q: string; status: InboxStatusFilter; assignee: InboxAssigneeFilter; channel: InboxChannelFilter };
 };
 
 const statusLabel: Record<InboxConversationStatus, string> = {
@@ -126,6 +130,7 @@ export function InboxWorkspace({
   customer,
   context,
   integration,
+  channels,
   window: serviceWindow,
   filters,
 }: Props) {
@@ -161,10 +166,15 @@ export function InboxWorkspace({
     announceInboxChange();
   }, [router]);
 
-  const filtered = Boolean(filters.q) || filters.status !== "all" || filters.assignee !== "all";
+  const filtered =
+    Boolean(filters.q) || filters.status !== "all" || filters.assignee !== "all" || filters.channel !== "all";
   // A brand-new inbox gets one setup card instead of two empty panes.
   const firstRun = conversations.length === 0 && !filtered;
-  const connected = Boolean(integration?.whatsappIsActive);
+  const connected = Object.values(channels).some(Boolean);
+  // The channel filter only earns its space once there is more than WhatsApp.
+  const multiChannel =
+    INBOX_CHANNELS.filter((channel) => channels[channel]).length > 1 ||
+    conversations.some((conversation) => conversation.channel !== "WHATSAPP");
 
   return (
     <div
@@ -191,7 +201,7 @@ export function InboxWorkspace({
       >
         <div className="flex min-w-0 items-center gap-[10px]">
           <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-kv-fg">Inbox</h1>
-          <ChannelStatus integration={integration} />
+          <ChannelStatus integration={integration} channels={channels} />
         </div>
         <div className="flex shrink-0 items-center gap-[6px]">
           <QuickReplyManager quickReplies={context.quickReplies} onChanged={refresh} />
@@ -199,7 +209,7 @@ export function InboxWorkspace({
           {!connected ? (
             <Button size="sm" asChild className="hidden sm:inline-flex">
               <Link href="/dashboard/settings/integrations">
-                <Smartphone /> Hubungkan WhatsApp
+                <Smartphone /> Hubungkan channel
               </Link>
             </Button>
           ) : null}
@@ -207,7 +217,7 @@ export function InboxWorkspace({
       </header>
 
       {firstRun ? (
-        <InboxSetup connected={connected} integration={integration} />
+        <InboxSetup connected={connected} integration={integration} channels={channels} />
       ) : (
         <div className="grid min-h-0 min-w-0 flex-1 overflow-hidden lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_300px]">
           <aside
@@ -253,6 +263,23 @@ export function InboxWorkspace({
                     })
                   }
                 />
+                {multiChannel ? (
+                  <div className="col-span-2">
+                    <FilterSelect
+                      label="Filter channel"
+                      value={filters.channel}
+                      options={[
+                        { value: "all", label: "Semua channel" },
+                        ...INBOX_CHANNELS.map((channel) => ({ value: channel, label: CHANNEL_LABEL[channel] })),
+                      ]}
+                      onChange={(value) =>
+                        router.push(href({ channel: value === "all" ? null : value, show: null, c: null, msgs: null }), {
+                          scroll: false,
+                        })
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -287,7 +314,7 @@ export function InboxWorkspace({
               ) : (
                 <>
                   {conversations.map((conversation) => {
-                    const name = conversation.contactName || formatPhone(conversation.contactPhone);
+                    const name = contactLabel(conversation);
                     const unread = conversation.unreadCount > 0;
                     const selected = active?.id === conversation.id;
                     return (
@@ -295,7 +322,7 @@ export function InboxWorkspace({
                         key={conversation.id}
                         href={href({ c: conversation.id, msgs: null })}
                         scroll={false}
-                        title={conversation.contactPhone}
+                        title={`${CHANNEL_LABEL[conversation.channel]} · ${contactAddress(conversation)}`}
                         aria-current={selected ? "true" : undefined}
                         className={cn(
                           "relative flex w-full gap-[10px] border-b border-black/[0.05] px-[14px] py-[11px] text-left transition-colors",
@@ -304,7 +331,10 @@ export function InboxWorkspace({
                             : "hover:bg-kv-hover"
                         )}
                       >
-                        <ContactAvatar name={name} />
+                        <span className="relative shrink-0">
+                          <ContactAvatar name={name} />
+                          {multiChannel ? <ChannelMark channel={conversation.channel} /> : null}
+                        </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-[8px]">
                             <p className={cn("truncate text-[13px] text-kv-fg", unread ? "font-semibold" : "font-medium")}>
@@ -371,12 +401,13 @@ export function InboxWorkspace({
                       <ArrowLeft />
                     </Link>
                   </Button>
-                  <ContactAvatar name={active.contactName || active.contactPhone} className="hidden sm:flex" />
+                  <ContactAvatar name={contactLabel(active)} className="hidden sm:flex" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-semibold text-kv-fg">{active.contactName || formatPhone(active.contactPhone)}</p>
+                    <p className="truncate text-[14px] font-semibold text-kv-fg">{contactLabel(active)}</p>
                     <p className="truncate text-[12px] text-kv-muted-fg">
-                      {formatPhone(active.contactPhone)}
-                      {active.customer?.email ? ` · ${active.customer.email}` : ""}
+                      {CHANNEL_LABEL[active.channel]}
+                      {active.channel === "WHATSAPP" ? ` · ${formatPhone(active.contactPhone)}` : ""}
+                      {active.customer?.email || active.contactEmail ? ` · ${active.customer?.email ?? active.contactEmail}` : ""}
                     </p>
                   </div>
                   <StatusPill status={active.status} className="hidden sm:inline-flex" />
@@ -423,7 +454,8 @@ export function InboxWorkspace({
 
                 <ReplyComposer
                   conversationId={active.id}
-                  enabled={connected}
+                  channelLabel={CHANNEL_LABEL[active.channel]}
+                  enabled={channels[active.channel]}
                   window={serviceWindow}
                   quickReplies={context.quickReplies}
                   onSent={(text) => {
@@ -458,7 +490,7 @@ export function InboxWorkspace({
           <SheetContent side="right" className="flex w-full max-w-md flex-col gap-0 p-0 sm:max-w-md">
             <SheetHeader className="border-b-[0.8px] border-kv-border px-[16px] py-[12px] text-left">
               <SheetTitle className="flex items-center gap-[8px] truncate text-[15px]">
-                {active.contactName || active.contactPhone}
+                {contactLabel(active)}
                 <StatusPill status={active.status} />
               </SheetTitle>
             </SheetHeader>
@@ -616,6 +648,43 @@ function SearchBox({ defaultValue }: { defaultValue: string }) {
   );
 }
 
+/** What to call a contact: their name, else the best address the channel gives. */
+function contactLabel(conversation: { channel: InboxChannel; contactName: string | null; contactPhone: string }) {
+  if (conversation.contactName) return conversation.contactName;
+  if (conversation.channel === "WHATSAPP") return formatPhone(conversation.contactPhone);
+  return conversation.channel === "WEBCHAT" ? "Pengunjung web" : `Pengguna ${CHANNEL_LABEL[conversation.channel]}`;
+}
+
+function contactAddress(conversation: { channel: InboxChannel; contactPhone: string }) {
+  if (conversation.channel === "WHATSAPP") return formatPhone(conversation.contactPhone);
+  // Web chat ids are hashes of the visitor's token: meaningless to a person.
+  return conversation.channel === "WEBCHAT" ? "chat di situs" : `ID ${conversation.contactPhone}`;
+}
+
+const CHANNEL_MARK: Record<InboxChannel, { short: string; tone: string }> = {
+  WHATSAPP: { short: "WA", tone: "bg-[#16a34a]" },
+  TELEGRAM: { short: "TG", tone: "bg-[#0ea5e9]" },
+  MESSENGER: { short: "FB", tone: "bg-[#2563eb]" },
+  INSTAGRAM: { short: "IG", tone: "bg-[#db2777]" },
+  WEBCHAT: { short: "WEB", tone: "bg-[#52525b]" },
+};
+
+/** A tiny badge on the avatar, so mixed-channel lists read at a glance. */
+function ChannelMark({ channel }: { channel: InboxChannel }) {
+  const mark = CHANNEL_MARK[channel];
+  return (
+    <span
+      aria-label={CHANNEL_LABEL[channel]}
+      className={cn(
+        "absolute -bottom-[3px] -right-[5px] rounded-[4px] border-[1.5px] border-kv-card px-[3px] text-[8px] font-bold leading-[11px] text-white",
+        mark.tone
+      )}
+    >
+      {mark.short}
+    </span>
+  );
+}
+
 /** 6281234567890 → +62 812-3456-7890; anything else is shown as stored. */
 function formatPhone(raw: string) {
   const digits = raw.replace(/\D/g, "");
@@ -674,17 +743,21 @@ function ContactAvatar({ name, className }: { name: string; className?: string }
   );
 }
 
-function ChannelStatus({ integration }: { integration: Props["integration"] }) {
-  const on = Boolean(integration?.whatsappIsActive);
+function ChannelStatus({ integration, channels }: { integration: Props["integration"]; channels: Props["channels"] }) {
+  const active = INBOX_CHANNELS.filter((channel) => channels[channel]);
+  const on = active.length > 0;
+  const label = !on
+    ? "Belum ada channel terhubung"
+    : active.length === 1 && active[0] === "WHATSAPP"
+      ? integration?.whatsappSenderNumber || "WhatsApp aktif"
+      : active.map((channel) => CHANNEL_LABEL[channel]).join(" · ");
   return (
     <span
       className="inline-flex h-[24px] min-w-0 items-center gap-[6px] rounded-[7px] border-[0.8px] border-kv-border bg-kv-card px-[8px] text-[12px] text-kv-secondary-fg"
-      title={on ? `Terhubung lewat ${integration?.whatsappProvider}` : "WhatsApp belum terhubung"}
+      title={on ? `Channel aktif: ${active.map((channel) => CHANNEL_LABEL[channel]).join(", ")}` : "Hubungkan channel di Pengaturan → Integrasi"}
     >
       <span className={cn("h-[7px] w-[7px] shrink-0 rounded-full", on ? "bg-kv-success" : "bg-amber-500")} />
-      <span className="truncate">
-        {on ? integration?.whatsappSenderNumber || "WhatsApp aktif" : "WhatsApp belum terhubung"}
-      </span>
+      <span className="truncate">{label}</span>
     </span>
   );
 }
@@ -726,20 +799,25 @@ function FilterSelect({
 function InboxSetup({
   connected,
   integration,
+  channels,
 }: {
   connected: boolean;
   integration: Props["integration"];
+  channels: Props["channels"];
 }) {
+  const active = INBOX_CHANNELS.filter((channel) => channels[channel]).map((channel) =>
+    channel === "WHATSAPP" && integration?.whatsappProvider ? `WhatsApp (${integration.whatsappProvider})` : CHANNEL_LABEL[channel]
+  );
   const steps = [
     {
       done: connected,
-      title: connected ? `WhatsApp terhubung${integration?.whatsappProvider ? ` (${integration.whatsappProvider})` : ""}` : "Hubungkan WhatsApp",
+      title: connected ? `Terhubung: ${active.join(", ")}` : "Hubungkan channel",
       body: connected
         ? "Pesan dari pelanggan masuk ke inbox ini secara otomatis."
-        : "Pasang provider WhatsApp di Integrasi supaya pesan pelanggan masuk dan balasanmu terkirim.",
+        : "Pasang WhatsApp, Telegram, Messenger, Instagram, atau web chat di Integrasi supaya pesan pelanggan masuk dan balasanmu terkirim.",
       action: connected ? null : (
         <Button size="sm" asChild>
-          <Link href="/dashboard/settings/integrations">
+          <Link href="/dashboard/settings/integrations#catalog-title">
             <Smartphone /> Buka Integrasi
           </Link>
         </Button>
@@ -767,7 +845,7 @@ function InboxSetup({
             <MessageCircle className="h-[18px] w-[18px] text-kv-secondary-fg" strokeWidth={1.6} />
           </span>
           <h2 className="mt-[12px] text-[17px] font-semibold text-kv-fg">Belum ada percakapan</h2>
-          <p className="mt-[4px] text-[13px] text-kv-muted-fg">Semua chat WhatsApp pelanggan akan berkumpul di sini.</p>
+          <p className="mt-[4px] text-[13px] text-kv-muted-fg">Chat pelanggan dari semua channel akan berkumpul di sini.</p>
         </div>
         <ol className="kv-frame flex flex-col gap-[4px] p-[4px]">
           {steps.map((step, index) => (

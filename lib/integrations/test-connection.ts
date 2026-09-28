@@ -3,6 +3,7 @@ import "server-only";
 import type { LoadedConnection } from "./connections";
 import type { TestResult } from "./http";
 import { testEmailConnection } from "./email/send";
+import { testInboxConnection } from "./inbox/channels";
 import { testPaymentConnection } from "./payments/gateway";
 
 /**
@@ -15,6 +16,8 @@ export async function testConnection(connection: LoadedConnection, context: { op
       return testEmailConnection(connection, context.operatorEmail);
     case "PAYMENT":
       return testPaymentConnection(connection);
+    case "INBOX":
+      return testInboxConnection(connection);
     default:
       return { ok: false, error: `Testing ${connection.provider.name} isn't available yet.` };
   }

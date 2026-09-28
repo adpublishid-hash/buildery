@@ -1,6 +1,7 @@
 import "server-only";
 
 import type {
+  InboxChannel,
   InboxConversationStatus,
   OrderStatus,
   Prisma,
@@ -55,18 +56,25 @@ export function resolveInboxAssigneeFilter(
 export const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export type ServiceWindow = {
-  /** Only the official Cloud API enforces this; gateways are not checked. */
+  /** Enforced by the WhatsApp Cloud API, Messenger and Instagram only. */
   enforced: boolean;
   open: boolean;
   expiresAt: Date | null;
 };
 
 export function serviceWindow(input: {
+  channel?: InboxChannel;
   provider: WhatsAppProvider | null | undefined;
   lastInboundAt: Date | null;
   now?: Date;
 }): ServiceWindow {
-  const enforced = input.provider === "WABA";
+  // Messenger and Instagram apply the same 24-hour standard messaging window
+  // as the WhatsApp Cloud API; Telegram and web chat have none.
+  const channel = input.channel ?? "WHATSAPP";
+  const enforced =
+    channel === "MESSENGER" ||
+    channel === "INSTAGRAM" ||
+    (channel === "WHATSAPP" && input.provider === "WABA");
   if (!input.lastInboundAt) {
     return { enforced, open: !enforced, expiresAt: null };
   }
@@ -95,8 +103,18 @@ export function normalizeInboxPhone(input: string) {
   return input.replace(/\D/g, "");
 }
 
+export type InboxChannelFilter = "all" | InboxChannel;
+
+export function resolveInboxChannelFilter(value: string | string[] | undefined): InboxChannelFilter {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw && ["WHATSAPP", "TELEGRAM", "INSTAGRAM", "MESSENGER", "WEBCHAT"].includes(raw)
+    ? (raw as InboxChannel)
+    : "all";
+}
+
 export type InboxConversationListItem = {
   id: string;
+  channel: InboxChannel;
   contactName: string | null;
   contactPhone: string;
   status: InboxConversationStatus;
@@ -114,9 +132,12 @@ function conversationFilter(
     status: InboxStatusFilter;
     assignee?: InboxAssigneeFilter;
     viewerId?: string;
+    channel?: InboxChannelFilter;
   }
 ): Prisma.InboxConversationWhereInput {
   const where: Prisma.InboxConversationWhereInput = { workspaceId };
+
+  if (options.channel && options.channel !== "all") where.channel = options.channel;
 
   if (options.status === "unread") where.unreadCount = { gt: 0 };
   else if (options.status !== "all") where.status = options.status;
@@ -145,6 +166,7 @@ export async function listInboxConversations(input: {
   status: InboxStatusFilter;
   assignee?: InboxAssigneeFilter;
   viewerId?: string;
+  channel?: InboxChannelFilter;
   take?: number;
 }) {
   const take = Math.min(Math.max(input.take ?? CONVERSATION_PAGE_SIZE, 1), 300);
@@ -153,6 +175,7 @@ export async function listInboxConversations(input: {
     status: input.status,
     assignee: input.assignee,
     viewerId: input.viewerId,
+    channel: input.channel,
   });
 
   // One extra row answers "is there more" without a second count query.
@@ -160,6 +183,7 @@ export async function listInboxConversations(input: {
     where,
     select: {
       id: true,
+      channel: true,
       contactName: true,
       contactPhone: true,
       status: true,
@@ -197,8 +221,10 @@ export async function loadInboxConversation(input: {
     where: { id: input.conversationId, workspaceId: input.workspaceId },
     select: {
       id: true,
+      channel: true,
       contactName: true,
       contactPhone: true,
+      contactEmail: true,
       status: true,
       unreadCount: true,
       lastInboundAt: true,

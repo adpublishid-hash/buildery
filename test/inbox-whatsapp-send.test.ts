@@ -34,7 +34,7 @@ const queued = {
   status: "QUEUED",
   direction: "OUTBOUND",
   body: "Halo, pesanan Anda sudah dikirim.",
-  conversation: { contactPhone: "+628123456789" },
+  conversation: { contactPhone: "+628123456789", channel: "WHATSAPP" },
 };
 const config = { provider: "FONNTE", apiKey: "k", phoneNumberId: "", apiBaseUrl: "", graphVersion: "v25.0" };
 

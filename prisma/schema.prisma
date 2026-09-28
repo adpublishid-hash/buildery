@@ -251,6 +251,10 @@ enum ShippingMethodType {
 
 enum InboxChannel {
   WHATSAPP
+  TELEGRAM
+  INSTAGRAM
+  MESSENGER
+  WEBCHAT
 }
 
 enum InboxConversationStatus {
@@ -1736,7 +1740,12 @@ model InboxConversation {
   channel            InboxChannel            @default(WHATSAPP)
   status             InboxConversationStatus @default(OPEN)
   contactName        String?
+  /// The contact's address on the channel: a phone number for WhatsApp, the
+  /// chat / sender id for Telegram, Messenger and Instagram, and a hash of the
+  /// visitor token for web chat (the raw token is the visitor's secret).
   contactPhone       String
+  /// Given by a web chat visitor; other channels match customers by phone.
+  contactEmail       String?
   subject            String?
   lastMessagePreview String?
   lastMessageAt      DateTime?
