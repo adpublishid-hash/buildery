@@ -1020,6 +1020,9 @@ async function main() {
         workspaceId: acmeId,
         customerId: customer.id,
         referralCode: "BUDI",
+        // Demo affiliates already earn commissions, so they must be approved.
+        status: "ACTIVE",
+        approvedAt: new Date(),
       },
     });
     const novaAff = await prisma.affiliate.create({
@@ -1028,6 +1031,8 @@ async function main() {
         workspaceId: acmeId,
         customerId: novaCustomer.id,
         referralCode: "NOVA",
+        status: "ACTIVE",
+        approvedAt: new Date(),
       },
     });
 

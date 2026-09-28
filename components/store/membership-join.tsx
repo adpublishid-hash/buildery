@@ -30,7 +30,7 @@ import type { MemberSession } from "@/lib/member-auth";
 type Plan = Pick<
   MembershipPlan,
   "id" | "name" | "description" | "level" | "price" | "accessDays" | "benefits" | "recommended" | "ctaLabel"
->;
+> & { slug?: string };
 
 export function MembershipJoin({
   workspaceId,
@@ -126,7 +126,11 @@ export function MembershipJoin({
             ? plan.benefits.filter((item): item is string => typeof item === "string")
             : [];
           return (
-          <Card key={plan.id} className={plan.recommended ? "flex flex-col border-zinc-900" : "flex flex-col"}>
+          <Card
+            key={plan.id}
+            id={plan.slug ? `plan-${plan.slug}` : undefined}
+            className={plan.recommended ? "flex scroll-mt-24 flex-col border-zinc-900" : "flex scroll-mt-24 flex-col"}
+          >
             <CardHeader className="space-y-2 pb-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-medium uppercase text-zinc-600">{MEMBERSHIP_LEVEL_LABEL[plan.level]}</span>

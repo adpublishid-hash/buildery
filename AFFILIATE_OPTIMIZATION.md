@@ -45,6 +45,14 @@ Implemented on 18 September 2026.
 - [x] Member affiliate portal with referral link, performance, payout settings, and history
 - [x] Campaign resources (links, images, and ready-to-use copy) in the affiliate portal
 
+## Dashboard pass (28 September 2026)
+
+- [x] Affiliates list: status tabs with counts, search by name/email/code, pending-review banner, bulk approve/reject, reject with an internal note
+- [x] Status changes follow an explicit transition table (`lib/affiliate-status.ts`) and are validated server-side
+- [x] Commission ledger status filter (pagination keeps the filter) and inline approve with refund-hold date
+- [x] Payouts: failed or cancelled batches release their commissions for re-batching; `FAILED` is now final, like `PAID` and `CANCELLED`
+- [x] Payouts are only offered for active or suspended affiliates, matching the server rule
+
 ## Deployment
 
 1. Apply `20260918130000_affiliate_platform_upgrade`.

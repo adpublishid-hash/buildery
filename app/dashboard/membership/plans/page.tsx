@@ -1,15 +1,13 @@
 import Link from "next/link";
-import { CreditCard, Eye, LockKeyhole, Users } from "lucide-react";
+import { CreditCard, Eye, LockKeyhole, Trophy, Users } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
 import { requireCurrentWorkspace } from "@/lib/workspace";
 import { publicSiteHref } from "@/lib/public-url";
 import { formatPrice } from "@/lib/utils";
 import { MEMBERSHIP_LEVEL_LABEL } from "@/lib/labels";
-import { Badge } from "@/components/ui/badge";
+import { summarizePlans } from "@/lib/membership-dashboard";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { MembershipNav } from "@/components/membership/membership-nav";
@@ -19,8 +17,9 @@ export const metadata = { title: "Membership plans · My Landing" };
 
 export default async function MembershipPlansPage() {
   const { workspace } = await requireCurrentWorkspace();
+  const now = new Date();
 
-  const [plans, products] = await Promise.all([
+  const [plans, products, activeByPlan, expiringSoon] = await Promise.all([
     prisma.membershipPlan.findMany({
       where: { workspaceId: workspace.id },
       include: {
@@ -37,17 +36,32 @@ export default async function MembershipPlansPage() {
       select: { id: true, name: true, price: true, type: true },
       orderBy: { name: "asc" },
     }),
+    prisma.customerMembership.groupBy({
+      by: ["planId"],
+      where: {
+        workspaceId: workspace.id,
+        status: "ACTIVE",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      _count: { _all: true },
+    }),
+    prisma.customerMembership.count({
+      where: {
+        workspaceId: workspace.id,
+        status: "ACTIVE",
+        expiresAt: { gt: now, lte: new Date(now.getTime() + 14 * 86_400_000) },
+      },
+    }),
   ]);
 
-  const activePlans = plans.filter((plan) => plan.isActive);
-  const paidPlans = plans.filter((plan) => plan.price > 0);
-  const memberCount = plans.reduce(
-    (sum, plan) => sum + plan._count.memberships,
-    0
-  );
-  const topPlan = plans
-    .slice()
-    .sort((a, b) => b._count.memberships - a._count.memberships)[0];
+  const activeCount = new Map(activeByPlan.map((row) => [row.planId, row._count._all]));
+  const rows = plans.map((plan) => ({
+    ...plan,
+    memberCount: plan._count.memberships,
+    activeMemberCount: activeCount.get(plan.id) ?? 0,
+  }));
+  const summary = summarizePlans(rows.map((row) => ({ ...row, activeMembers: row.activeMemberCount })));
+  const publicUrl = publicSiteHref(workspace.slug, "memberships");
 
   return (
     <div className="w-full min-w-0">
@@ -56,80 +70,55 @@ export default async function MembershipPlansPage() {
         description="Plans bundle access at a given level — Free, Basic, or Premium."
         action={
           <Button asChild variant="outline">
-            <Link href={publicSiteHref(workspace.slug, "memberships")} target="_blank">
+            <Link href={publicUrl} target="_blank">
               <Eye className="h-4 w-4" />
               Public page
             </Link>
           </Button>
         }
       />
-      <MembershipNav />
+      <MembershipNav expiringSoon={expiringSoon} />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-4">
+      <div className="mb-[16px] grid grid-cols-1 gap-[12px] sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
+          index={0}
           label="Plans"
-          value={plans.length}
-          delta={`${activePlans.length} active`}
+          value={summary.total}
+          delta={
+            summary.total
+              ? `${summary.active} live · ${summary.total - summary.active} hidden`
+              : "Pick a template below"
+          }
           icon={CreditCard}
         />
         <StatCard
-          label="Members"
-          value={memberCount}
-          delta="Across all plans"
+          index={1}
+          label="Active members"
+          value={summary.activeMembers.toLocaleString()}
+          delta="With access right now"
           icon={Users}
         />
         <StatCard
+          index={2}
           label="Paid plans"
-          value={paidPlans.length}
-          delta={
-            paidPlans.length > 0
-              ? `From ${formatPrice(Math.min(...paidPlans.map((p) => p.price)))}`
-              : "No paid tier yet"
-          }
+          value={summary.paid}
+          delta={summary.cheapestPaid !== null ? `From ${formatPrice(summary.cheapestPaid)}` : "No paid tier yet"}
           icon={LockKeyhole}
         />
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-medium text-zinc-500">Top plan</p>
-            {topPlan ? (
-              <>
-                <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-zinc-900">
-                  {topPlan.name}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Badge variant="secondary">
-                    {MEMBERSHIP_LEVEL_LABEL[topPlan.level]}
-                  </Badge>
-                  <Badge variant="outline">
-                    {topPlan._count.memberships} members
-                  </Badge>
-                </div>
-              </>
-            ) : (
-              <p className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">
-                —
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <StatCard
+          index={3}
+          label="Top plan"
+          value={summary.top?.name ?? "—"}
+          delta={
+            summary.top
+              ? `${summary.top.name === MEMBERSHIP_LEVEL_LABEL[summary.top.level] ? "" : `${MEMBERSHIP_LEVEL_LABEL[summary.top.level]} · `}${summary.top.activeMembers} active ${summary.top.activeMembers === 1 ? "member" : "members"}`
+              : "No active members yet"
+          }
+          icon={Trophy}
+        />
       </div>
 
-      {plans.length === 0 ? (
-        <EmptyState
-          icon={CreditCard}
-          title="No plans yet"
-          description="Create your first plan to start managing memberships."
-        />
-      ) : null}
-
-      <Card>
-        <CardContent className="pt-6">
-          <PlansTable
-            plans={plans.map((p) => ({ ...p, memberCount: p._count.memberships }))}
-            products={products}
-          />
-        </CardContent>
-      </Card>
+      <PlansTable plans={rows} products={products} publicUrl={publicUrl} />
     </div>
   );
 }

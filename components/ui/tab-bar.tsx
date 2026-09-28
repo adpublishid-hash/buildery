@@ -13,6 +13,8 @@ export type TabItem = {
   /** Set for tabs that navigate; omit for tabs handled in the page. */
   href?: string;
   danger?: boolean;
+  /** Small counter shown after the label, e.g. items waiting for review. Hidden at 0. */
+  count?: number;
 };
 
 /**
@@ -70,6 +72,16 @@ export function TabBar({
               />
             ) : null}
             <span className="whitespace-nowrap">{item.label}</span>
+            {item.count ? (
+              <span
+                className={cn(
+                  "kv-tabular -mr-[3px] inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full px-[5px] text-[10px] font-semibold leading-none",
+                  isActive ? "bg-white/20 text-white" : "bg-kv-secondary text-kv-secondary-fg"
+                )}
+              >
+                {item.count > 99 ? "99+" : item.count}
+              </span>
+            ) : null}
           </>
         );
         const classes = cn(

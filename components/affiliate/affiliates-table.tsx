@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
+  Archive,
+  CircleCheck,
+  CirclePause,
+  CircleX,
   Copy,
   Loader2,
   MoreHorizontal,
   RefreshCw,
-  Trash2,
-  UserPlus,
-  CircleCheck,
-  CirclePause,
-  CircleX,
+  RotateCcw,
+  Search,
+  X,
 } from "lucide-react";
 import type { AffiliateStatus } from "@prisma/client";
 import { toast } from "sonner";
@@ -26,15 +28,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,8 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { TabBar } from "@/components/ui/tab-bar";
 import {
   Table,
   TableBody,
@@ -53,71 +47,140 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  addAffiliateAction,
+  bulkSetAffiliateStatusAction,
   regenerateReferralCodeAction,
-  removeAffiliateAction,
   setAffiliateStatusAction,
 } from "@/lib/actions/affiliate";
-import { formatPrice } from "@/lib/utils";
+import {
+  AFFILIATE_STATUS_LABEL,
+  affiliateTransitionVerb,
+  allowedAffiliateTransitions,
+} from "@/lib/affiliate-status";
+import { cn, formatDate, formatPrice } from "@/lib/utils";
 
 export type AffiliateRow = {
   id: string;
   referralCode: string;
   status: AffiliateStatus;
   customer: { name: string; email: string };
+  joinedAt: Date;
+  rejectionReason: string | null;
+  hasPayoutAccount: boolean;
   clicks: number;
   uniqueClicks: number;
   leads: number;
   sales: number;
   earned: number;
+  unpaid: number;
   conversionRate: number;
 };
+
+export type AffiliateFilterStatus = "ALL" | AffiliateStatus;
+
+export type AffiliateFilters = {
+  q: string;
+  status: AffiliateFilterStatus;
+};
+
+const FILTER_TABS: { key: AffiliateFilterStatus; label: string }[] = [
+  { key: "ALL", label: "All" },
+  { key: "PENDING", label: "Pending" },
+  { key: "ACTIVE", label: "Active" },
+  { key: "SUSPENDED", label: "Suspended" },
+  { key: "REJECTED", label: "Rejected" },
+  { key: "ARCHIVED", label: "Archived" },
+];
+
+// Near-monochrome badges; the dot colour carries the state.
+const STATUS_DOT: Record<AffiliateStatus, string> = {
+  PENDING: "before:bg-amber-500",
+  ACTIVE: "",
+  SUSPENDED: "before:bg-orange-500",
+  REJECTED: "before:bg-red-500",
+  ARCHIVED: "before:bg-kv-subtle",
+};
+
+const ACTION_META: Record<AffiliateStatus, { label: string; icon: typeof CircleCheck }> = {
+  ACTIVE: { label: "Approve", icon: CircleCheck },
+  SUSPENDED: { label: "Suspend", icon: CirclePause },
+  REJECTED: { label: "Reject", icon: CircleX },
+  ARCHIVED: { label: "Archive", icon: Archive },
+  PENDING: { label: "Mark pending", icon: RotateCcw },
+};
+
+function actionLabel(from: AffiliateStatus, to: AffiliateStatus) {
+  if (to === "ACTIVE" && from === "ARCHIVED") return "Restore";
+  if (to === "ACTIVE" && from === "SUSPENDED") return "Reactivate";
+  return ACTION_META[to].label;
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
 
 export function AffiliatesTable({
   affiliates,
   appOrigin,
   canManage,
+  filters,
+  counts,
+  matchingCount,
 }: {
   affiliates: AffiliateRow[];
   appOrigin: string;
   canManage: boolean;
+  filters: AffiliateFilters;
+  counts: Record<AffiliateFilterStatus, number>;
+  matchingCount: number;
 }) {
   const router = useRouter();
+  const pathname = usePathname() ?? "/dashboard/affiliate";
   const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState(filters.q);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmArchive, setConfirmArchive] = useState<AffiliateRow | null>(null);
+  const [confirmReject, setConfirmReject] = useState<{ rows: AffiliateRow[] } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<AffiliateRow | null>(null);
-  const [form, setForm] = useState({ name: "", email: "" });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [serverError, setServerError] = useState<string | null>(null);
+  const selectable = canManage ? affiliates.filter((a) => a.status === "PENDING") : [];
+  const selectedRows = selectable.filter((a) => selected.has(a.id));
+  const allSelected = selectable.length > 0 && selectedRows.length === selectable.length;
 
-  function submitAdd(e: React.FormEvent) {
-    e.preventDefault();
-    setServerError(null);
-    setErrors({});
-    const fd = new FormData();
-    fd.set("name", form.name);
-    fd.set("email", form.email);
+  function hrefFor(next: Partial<AffiliateFilters>) {
+    const merged = { ...filters, q: query, ...next };
+    const params = new URLSearchParams();
+    if (merged.q.trim()) params.set("q", merged.q.trim());
+    if (merged.status !== "ALL") params.set("status", merged.status);
+    const qs = params.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  }
 
-    startTransition(async () => {
-      const res = await addAffiliateAction(fd);
-      if (!res.ok) {
-        setServerError(res.error);
-        if (res.fieldErrors) {
-          const flat: Record<string, string> = {};
-          for (const [k, v] of Object.entries(res.fieldErrors)) {
-            if (v?.[0]) flat[k] = v[0];
-          }
-          setErrors(flat);
-        }
-        return;
-      }
-      toast.success("Affiliate added");
-      setForm({ name: "", email: "" });
-      setAddOpen(false);
-      router.refresh();
+  function applySearch(value: string) {
+    setSelected(new Set());
+    router.push(hrefFor({ q: value }));
+  }
+
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
+  }
+
+  function copyLink(code: string) {
+    navigator.clipboard
+      ?.writeText(`${appOrigin}/r/${code}`)
+      .then(() => toast.success("Referral link copied"))
+      .catch(() => toast.error("Could not copy"));
   }
 
   function regenerate(id: string) {
@@ -127,240 +190,337 @@ export function AffiliatesTable({
         toast.error(res.error);
         return;
       }
-      toast.success("New referral code");
+      toast.success("New referral code issued. The old link keeps working for 90 days.");
       router.refresh();
     });
   }
 
-  function copyLink(code: string) {
-    const link = `${appOrigin}/r/${code}`;
-    navigator.clipboard
-      ?.writeText(link)
-      .then(() => toast.success("Referral link copied"))
-      .catch(() => toast.error("Could not copy"));
-  }
-
-  function remove() {
-    if (!confirmDelete) return;
+  function changeStatus(row: AffiliateRow, status: AffiliateStatus, reason?: string, done?: () => void) {
     startTransition(async () => {
-      const res = await removeAffiliateAction(confirmDelete.id);
+      const res = await setAffiliateStatusAction(row.id, status, reason);
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success("Affiliate removed");
-      setConfirmDelete(null);
+      toast.success(`${row.customer.name} ${affiliateTransitionVerb(row.status, status)}`);
+      done?.();
       router.refresh();
     });
   }
 
-  function changeStatus(id: string, status: AffiliateStatus) {
+  function bulk(status: "ACTIVE" | "REJECTED", done?: () => void) {
+    const ids = selectedRows.map((row) => row.id);
     startTransition(async () => {
-      const res = await setAffiliateStatusAction(id, status);
+      const res = await bulkSetAffiliateStatusAction(ids, status);
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Affiliate ${status.toLowerCase()}`);
+      const verb = status === "ACTIVE" ? "approved" : "rejected";
+      const updated = res.data?.updated ?? 0;
+      const skipped = res.data?.skipped ?? 0;
+      toast.success(
+        `${updated} ${updated === 1 ? "application" : "applications"} ${verb}` +
+          (skipped ? ` · ${skipped} skipped` : "")
+      );
+      setSelected(new Set());
+      done?.();
       router.refresh();
     });
+  }
+
+  function submitReject() {
+    if (!confirmReject) return;
+    const close = () => {
+      setConfirmReject(null);
+      setRejectReason("");
+    };
+    if (confirmReject.rows.length === 1 && selectedRows.length === 0) {
+      changeStatus(confirmReject.rows[0], "REJECTED", rejectReason.trim() || undefined, close);
+    } else {
+      bulk("REJECTED", close);
+    }
   }
 
   return (
     <>
-      <div className="flex justify-end pb-3">
-        {canManage ? (
-        <Button onClick={() => setAddOpen(true)}>
-          <UserPlus /> Add affiliate
-        </Button>
-        ) : null}
+      <div className="flex flex-col gap-[10px] border-b-[0.8px] border-kv-border p-[10px] lg:flex-row lg:items-center lg:justify-between">
+        <TabBar
+          ariaLabel="Filter affiliates by status"
+          active={filters.status}
+          items={FILTER_TABS.map((tab) => ({
+            key: tab.key,
+            label: tab.label,
+            href: hrefFor({ status: tab.key }),
+            count: counts[tab.key],
+          }))}
+        />
+        <form
+          className="relative w-full lg:w-[280px]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            applySearch(query);
+          }}
+        >
+          <Search className="pointer-events-none absolute left-[10px] top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-kv-muted-fg" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, email, or code"
+            className="pl-[30px] pr-[30px]"
+            aria-label="Search affiliates"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                applySearch("");
+              }}
+              className="absolute right-[8px] top-1/2 -translate-y-1/2 rounded p-[2px] text-kv-muted-fg hover:text-kv-fg"
+              aria-label="Clear search"
+            >
+              <X className="h-[14px] w-[14px]" />
+            </button>
+          ) : null}
+        </form>
       </div>
 
-      {affiliates.length ? <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-zinc-200">
-        <Table className="min-w-[1040px]">
+      {selectedRows.length > 0 ? (
+        <div className="flex animate-kv-fade flex-wrap items-center justify-between gap-[8px] border-b-[0.8px] border-kv-border bg-kv-secondary/60 px-[12px] py-[8px]">
+          <p className="text-[12px] text-kv-secondary-fg">
+            <span className="kv-tabular font-semibold text-kv-fg">{selectedRows.length}</span>{" "}
+            {selectedRows.length === 1 ? "application" : "applications"} selected
+          </p>
+          <div className="flex items-center gap-[6px]">
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={pending}>
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setConfirmReject({ rows: selectedRows })}
+              disabled={pending}
+            >
+              <CircleX /> Reject
+            </Button>
+            <Button size="sm" onClick={() => bulk("ACTIVE")} disabled={pending}>
+              {pending ? <Loader2 className="animate-spin" /> : <CircleCheck />} Approve
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {affiliates.length === 0 ? (
+        <div className="px-[16px] py-[40px] text-center">
+          <p className="text-[13px] font-medium text-kv-fg">No affiliates match</p>
+          <p className="mt-[4px] text-[12px] text-kv-muted-fg">
+            {filters.q
+              ? `Nothing found for “${filters.q}”. Try a different name, email, or code.`
+              : filters.status === "PENDING"
+                ? "No applications are waiting for review."
+                : "Try another status filter."}
+          </p>
+        </div>
+      ) : (
+        <Table className="min-w-[980px]">
           <TableHeader>
             <TableRow>
-              <TableHead className="pl-4">Affiliate</TableHead>
-              <TableHead>Referral link</TableHead>
+              {selectable.length > 0 ? (
+                <TableHead className="w-[36px] pl-[14px]">
+                  <input
+                    type="checkbox"
+                    className="h-[14px] w-[14px] cursor-pointer accent-[rgb(var(--kv-fg))]"
+                    checked={allSelected}
+                    onChange={() =>
+                      setSelected(allSelected ? new Set() : new Set(selectable.map((row) => row.id)))
+                    }
+                    aria-label="Select all pending applications"
+                  />
+                </TableHead>
+              ) : null}
+              <TableHead className={selectable.length ? undefined : "pl-[14px]"}>Affiliate</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Clicks</TableHead>
-              <TableHead>Unique</TableHead>
-              <TableHead>Leads</TableHead>
-              <TableHead>Sales</TableHead>
-              <TableHead>Conversion</TableHead>
-              <TableHead>Earned</TableHead>
-              <TableHead className="w-12 pr-4 text-right">
+              <TableHead>Referral link</TableHead>
+              <TableHead className="text-right">Clicks</TableHead>
+              <TableHead className="text-right">Sales</TableHead>
+              <TableHead className="text-right">Earned</TableHead>
+              <TableHead>Joined</TableHead>
+              <TableHead className="w-[1%] pr-[14px] text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {affiliates.map((a) => (
-              <TableRow key={a.id}>
-                <TableCell className="pl-4">
-                  <p className="text-sm font-medium text-zinc-900">
-                    {a.customer.name}
-                  </p>
-                  <p className="truncate text-xs text-zinc-500">
-                    {a.customer.email}
-                  </p>
-                </TableCell>
-                <TableCell>
-                  {a.status === "ACTIVE" ? <button
-                    type="button"
-                    onClick={() => copyLink(a.referralCode)}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-900 transition-colors hover:bg-zinc-200"
-                    title="Copy referral link"
-                  >
-                    /r/{a.referralCode}
-                    <Copy className="h-3 w-3" />
-                  </button> : <span className="text-xs text-zinc-400">Inactive</span>}
-                </TableCell>
-                <TableCell><Badge variant="outline">{a.status.charAt(0) + a.status.slice(1).toLowerCase()}</Badge></TableCell>
-                <TableCell className="text-sm text-zinc-700">
-                  {a.clicks}
-                </TableCell>
-                <TableCell className="text-sm text-zinc-700">{a.uniqueClicks}</TableCell>
-                <TableCell className="text-sm text-zinc-700">
-                  {a.leads}
-                </TableCell>
-                <TableCell className="text-sm text-zinc-700">
-                  {a.sales}
-                </TableCell>
-                <TableCell className="text-sm text-zinc-700">{a.conversionRate.toFixed(1)}%</TableCell>
-                <TableCell className="text-sm font-medium text-zinc-900">
-                  {formatPrice(a.earned)}
-                </TableCell>
-                <TableCell className="pr-4 text-right">
-                  {canManage ? <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Affiliate actions"
+            {affiliates.map((a) => {
+              const transitions = allowedAffiliateTransitions(a.status);
+              const isPending = a.status === "PENDING";
+              return (
+                <TableRow key={a.id} className={cn(selected.has(a.id) && "bg-kv-secondary/50")}>
+                  {selectable.length > 0 ? (
+                    <TableCell className="pl-[14px]">
+                      {isPending ? (
+                        <input
+                          type="checkbox"
+                          className="h-[14px] w-[14px] cursor-pointer accent-[rgb(var(--kv-fg))]"
+                          checked={selected.has(a.id)}
+                          onChange={() => toggle(a.id)}
+                          aria-label={`Select ${a.customer.name}`}
+                        />
+                      ) : null}
+                    </TableCell>
+                  ) : null}
+                  <TableCell className={selectable.length ? undefined : "pl-[14px]"}>
+                    <div className="flex min-w-0 items-center gap-[10px]">
+                      <span
+                        aria-hidden
+                        className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full border-[0.8px] border-kv-border bg-kv-secondary text-[11px] font-semibold text-kv-secondary-fg"
                       >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem
-                        disabled={a.status !== "ACTIVE"}
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          copyLink(a.referralCode);
-                        }}
+                        {initials(a.customer.name) || "?"}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium text-kv-fg">{a.customer.name}</p>
+                        <p className="truncate text-[12px] text-kv-muted-fg">{a.customer.email}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="success" className={STATUS_DOT[a.status]}>
+                      {AFFILIATE_STATUS_LABEL[a.status]}
+                    </Badge>
+                    {a.status === "REJECTED" && a.rejectionReason ? (
+                      <p className="mt-[4px] max-w-[180px] truncate text-[11px] text-kv-muted-fg" title={a.rejectionReason}>
+                        {a.rejectionReason}
+                      </p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    {a.status === "ACTIVE" ? (
+                      <button
+                        type="button"
+                        onClick={() => copyLink(a.referralCode)}
+                        className="inline-flex items-center gap-[6px] rounded-[6px] border-[0.8px] border-kv-border bg-kv-secondary px-[6px] py-[3px] font-mono text-[11px] text-kv-fg transition-colors hover:bg-kv-hover"
+                        title="Copy referral link"
                       >
-                        <Copy /> Copy link
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={pending}
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          regenerate(a.id);
-                        }}
-                      >
-                        <RefreshCw /> New code
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {a.status !== "ACTIVE" ? <DropdownMenuItem onSelect={(e) => { e.preventDefault(); changeStatus(a.id, "ACTIVE"); }}>
-                        <CircleCheck /> Approve / activate
-                      </DropdownMenuItem> : <DropdownMenuItem onSelect={(e) => { e.preventDefault(); changeStatus(a.id, "SUSPENDED"); }}>
-                        <CirclePause /> Suspend
-                      </DropdownMenuItem>}
-                      {a.status === "PENDING" ? <DropdownMenuItem onSelect={(e) => { e.preventDefault(); changeStatus(a.id, "REJECTED"); }} className="text-red-600 focus:text-red-700">
-                        <CircleX /> Reject
-                      </DropdownMenuItem> : null}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          setConfirmDelete(a);
-                        }}
-                        className="text-red-600 focus:bg-red-50 focus:text-red-700"
-                      >
-                        <Trash2 /> Remove
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu> : null}
-                </TableCell>
-              </TableRow>
-            ))}
+                        /r/{a.referralCode}
+                        <Copy className="h-[12px] w-[12px] text-kv-muted-fg" />
+                      </button>
+                    ) : (
+                      <span className="text-[12px] text-kv-muted-fg">
+                        {isPending ? "Issued on approval" : "Link disabled"}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="kv-tabular text-right">
+                    <p className="text-[13px] text-kv-fg">{a.uniqueClicks.toLocaleString()}</p>
+                    {a.clicks !== a.uniqueClicks ? (
+                      <p className="text-[11px] text-kv-muted-fg">{a.clicks.toLocaleString()} total</p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="kv-tabular text-right">
+                    <p className="text-[13px] text-kv-fg">{a.sales.toLocaleString()}</p>
+                    <p className="text-[11px] text-kv-muted-fg">{a.conversionRate.toFixed(1)}% conv.</p>
+                  </TableCell>
+                  <TableCell className="kv-tabular text-right">
+                    <p className="text-[13px] font-medium text-kv-fg">{formatPrice(a.earned)}</p>
+                    {a.unpaid > 0 ? (
+                      <p className="text-[11px] text-kv-muted-fg">{formatPrice(a.unpaid)} unpaid</p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-[12px] text-kv-muted-fg">
+                    {formatDate(a.joinedAt)}
+                  </TableCell>
+                  <TableCell className="pr-[14px] text-right">
+                    <div className="flex items-center justify-end gap-[4px]">
+                      {canManage && isPending ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => changeStatus(a, "ACTIVE")}
+                          disabled={pending}
+                        >
+                          <CircleCheck /> Approve
+                        </Button>
+                      ) : null}
+                      {canManage ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label={`Actions for ${a.customer.name}`}>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            {a.status === "ACTIVE" ? (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    copyLink(a.referralCode);
+                                  }}
+                                >
+                                  <Copy /> Copy referral link
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={pending}
+                                  onSelect={() => {
+                                    regenerate(a.id);
+                                  }}
+                                >
+                                  <RefreshCw /> Issue new code
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
+                            ) : null}
+                            {transitions.map((to) => {
+                              const Icon = to === "ACTIVE" && a.status !== "PENDING" ? RotateCcw : ACTION_META[to].icon;
+                              const destructive = to === "ARCHIVED" || to === "REJECTED";
+                              return (
+                                <DropdownMenuItem
+                                  key={to}
+                                  disabled={pending}
+                                  className={destructive ? "text-red-600 focus:bg-red-50 focus:text-red-700" : undefined}
+                                  onSelect={(e) => {
+                                    if (to === "ARCHIVED" || to === "REJECTED") {
+                                      // Keep focus handling sane while the confirm dialog opens.
+                                      e.preventDefault();
+                                      if (to === "ARCHIVED") setConfirmArchive(a);
+                                      else {
+                                        setSelected(new Set());
+                                        setConfirmReject({ rows: [a] });
+                                      }
+                                    } else changeStatus(a, to);
+                                  }}
+                                >
+                                  <Icon /> {actionLabel(a.status, to)}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
-      </div> : null}
+      )}
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add affiliate</DialogTitle>
-            <DialogDescription>
-              Generates a unique referral code. Existing customers are reused
-              by email.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={submitAdd} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="a-name">Full name</Label>
-              <Input
-                id="a-name"
-                value={form.name}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, name: e.target.value }))
-                }
-              />
-              {errors.name && (
-                <p className="text-xs text-red-600">{errors.name}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="a-email">Email</Label>
-              <Input
-                id="a-email"
-                type="email"
-                value={form.email}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, email: e.target.value }))
-                }
-              />
-              {errors.email && (
-                <p className="text-xs text-red-600">{errors.email}</p>
-              )}
-            </div>
-            {serverError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {serverError}
-              </div>
-            )}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setAddOpen(false)}
-                disabled={pending}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending}>
-                {pending ? <Loader2 className="animate-spin" /> : <UserPlus />}
-                Add
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {matchingCount > 0 ? (
+        <p className="kv-tabular border-t-[0.8px] border-kv-border px-[14px] py-[8px] text-[12px] text-kv-muted-fg">
+          {matchingCount.toLocaleString()} {matchingCount === 1 ? "affiliate" : "affiliates"}
+          {filters.status !== "ALL" ? ` · ${AFFILIATE_STATUS_LABEL[filters.status].toLowerCase()}` : ""}
+          {filters.q ? ` · matching “${filters.q}”` : ""}
+        </p>
+      ) : null}
 
-      <AlertDialog
-        open={Boolean(confirmDelete)}
-        onOpenChange={(o) => !o && setConfirmDelete(null)}
-      >
+      <AlertDialog open={Boolean(confirmArchive)} onOpenChange={(o) => !o && setConfirmArchive(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Remove {confirmDelete?.customer.name} from the program?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Archive {confirmArchive?.customer.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Their referral code stops working immediately. Existing clicks,
-              commissions, and payouts remain attached for audit history.
+              Their referral link stops working immediately. Clicks, commissions, and payouts stay
+              attached for audit history, and you can restore them from the Archived tab.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -368,12 +528,58 @@ export function AffiliatesTable({
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
-                remove();
+                if (confirmArchive) changeStatus(confirmArchive, "ARCHIVED", undefined, () => setConfirmArchive(null));
               }}
               disabled={pending}
               className="bg-red-600 text-white hover:bg-red-700"
             >
               {pending ? "Archiving…" : "Archive"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(confirmReject)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConfirmReject(null);
+            setRejectReason("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmReject && confirmReject.rows.length > 1
+                ? `Reject ${confirmReject.rows.length} applications?`
+                : `Reject ${confirmReject?.rows[0]?.customer.name ?? "application"}?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              They won&apos;t get a referral link. You can still approve them later from the Rejected tab.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirmReject && confirmReject.rows.length === 1 && selectedRows.length === 0 ? (
+            <Textarea
+              rows={2}
+              maxLength={500}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Internal note (optional), e.g. audience doesn't match"
+              aria-label="Rejection note"
+            />
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                submitReject();
+              }}
+              disabled={pending}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {pending ? "Rejecting…" : "Reject"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

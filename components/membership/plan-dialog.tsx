@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
-import { Clock3, CreditCard, Loader2, RefreshCcw } from "lucide-react";
+import { Archive, Check, Clock3, CreditCard, Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   planId?: string;
+  /** Archived plans can be edited but stay hidden until restored. */
+  archived?: boolean;
   defaultValues: PlanDialogValues;
   products?: { id: string; name: string; price: number; type: string }[];
 };
@@ -62,6 +64,7 @@ export function PlanDialog({
   onOpenChange,
   mode,
   planId,
+  archived = false,
   defaultValues,
   products = [],
 }: Props) {
@@ -88,6 +91,15 @@ export function PlanDialog({
   const accessDays = watch("accessDays");
   const isActive = watch("isActive");
   const productId = watch("productId");
+  const benefits = watch("benefits");
+  const recommended = watch("recommended");
+  const ctaLabel = watch("ctaLabel");
+  const description = watch("description");
+  const benefitList = (benefits ?? "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 6);
   const selectedProduct = products.find((product) => product.id === productId);
   const priceNumber = Number(price || 0);
   const accessDaysNumber = Number(accessDays || 0);
@@ -174,10 +186,10 @@ export function PlanDialog({
       <DialogContent className="flex max-h-[90vh] max-w-[880px] flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b-[0.8px] border-kv-border px-[20px] py-[14px] pr-[48px] text-left">
           <DialogTitle>
-            {mode === "create" ? "Paket baru" : "Edit paket"}
+            {mode === "create" ? "New plan" : "Edit plan"}
           </DialogTitle>
           <DialogDescription>
-            Paket memberi akses ke level membership tertentu.
+            A plan grants access to a membership level for a set period.
           </DialogDescription>
         </DialogHeader>
 
@@ -185,7 +197,7 @@ export function PlanDialog({
           <div className="grid min-h-0 flex-1 gap-[16px] overflow-y-auto px-[20px] py-[16px] md:grid-cols-[minmax(0,1fr)_240px]">
             <div className="min-w-0 space-y-[16px]">
               <div className="flex flex-wrap items-center gap-[6px]">
-                <span className="mr-[2px] text-[12px] text-kv-muted-fg">Mulai dari preset:</span>
+                <span className="mr-[2px] text-[12px] text-kv-muted-fg">Presets:</span>
                 <button
                   type="button"
                   onClick={() => applyPreset("free")}
@@ -215,6 +227,12 @@ export function PlanDialog({
                   Lifetime
                 </button>
               </div>
+              {archived ? (
+                <div className="flex items-start gap-[8px] rounded-[8px] border-[0.8px] border-amber-200 bg-amber-50/70 px-[12px] py-[8px] text-[12px] text-amber-900">
+                  <Archive className="mt-[1px] h-[14px] w-[14px] shrink-0" />
+                  This plan is archived. Changes are saved, but it stays hidden from signup until you restore it.
+                </div>
+              ) : null}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="plan-name">Name</Label>
@@ -259,7 +277,7 @@ export function PlanDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="plan-access-days">Durasi akses (hari)</Label>
+            <Label htmlFor="plan-access-days">Access length (days)</Label>
             <Input
               id="plan-access-days"
               type="number"
@@ -268,7 +286,7 @@ export function PlanDialog({
               {...register("accessDays")}
             />
             <p className="text-xs text-kv-muted-fg">
-              0 = lifetime. Akses ini dibayar sekali, bukan tagihan berulang.
+              0 = lifetime. Paid once, not a recurring charge. Members extend by buying again.
             </p>
           </div>
 
@@ -344,7 +362,7 @@ export function PlanDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="NONE">
-                      Tier gratis (tanpa produk)
+                      No linked product
                     </SelectItem>
                     {products.map((product) => (
                       <SelectItem key={product.id} value={product.id}>
@@ -356,7 +374,7 @@ export function PlanDialog({
               )}
             />
             <p className="text-xs text-kv-muted-fg">
-              Customer otomatis mendapat tier ini setelah membeli produk terkait.
+              Customers get this plan automatically after buying the linked product.
             </p>
             {selectedProduct ? (
               <Button
@@ -377,7 +395,7 @@ export function PlanDialog({
 
           <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="plan-active">Status</Label>
+            <Label htmlFor="plan-active">Visibility</Label>
             <Controller
               control={control}
               name="isActive"
@@ -387,8 +405,8 @@ export function PlanDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="true">Active</SelectItem>
-                    <SelectItem value="false">Inactive</SelectItem>
+                    <SelectItem value="true" disabled={archived}>Live on membership page</SelectItem>
+                    <SelectItem value="false">Hidden</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -428,32 +446,58 @@ export function PlanDialog({
 
             </div>
             <div className="md:sticky md:top-0 md:self-start">
-          <div className="kv-frame p-[4px]"><p className="px-[8px] py-[6px] text-[12px] font-medium text-kv-secondary-fg">Pratinjau publik</p><div className="rounded-[10px] border-[0.8px] border-kv-input bg-kv-card p-[14px]">
-            <div className="flex flex-col gap-[10px]">
-              <div className="min-w-0">
-                <p className="mt-2 truncate text-lg font-semibold text-kv-fg">
-                  {name || "Untitled plan"}
-                </p>
-                <p className="mt-1 text-sm text-kv-muted-fg">
-                  /{slug || "plan-slug"} · {MEMBERSHIP_LEVEL_LABEL[level]}
-                </p>
+          <div className="kv-frame p-[4px]">
+            <p className="px-[8px] py-[6px] text-[12px] font-medium text-kv-secondary-fg">Public preview</p>
+            <div
+              className={
+                recommended === "true"
+                  ? "rounded-[10px] border-[0.8px] border-kv-fg bg-kv-card p-[14px]"
+                  : "rounded-[10px] border-[0.8px] border-kv-input bg-kv-card p-[14px]"
+              }
+            >
+              <div className="flex items-center justify-between gap-[6px]">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-kv-muted-fg">
+                  {MEMBERSHIP_LEVEL_LABEL[level]}
+                </span>
+                {recommended === "true" ? (
+                  <span className="rounded-full bg-kv-fg px-[6px] py-[2px] text-[10px] font-medium text-white">
+                    Recommended
+                  </span>
+                ) : null}
               </div>
-              <div className="shrink-0 text-left">
-                <p className="text-lg font-semibold text-kv-fg">
-                  {priceNumber > 0 ? formatPrice(priceNumber) : "Free"}
-                </p>
-                <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-kv-muted-fg">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  {durationText}
-                </p>
+              <p className="mt-[6px] truncate text-[16px] font-semibold text-kv-fg">{name || "Untitled plan"}</p>
+              {description ? (
+                <p className="mt-[2px] line-clamp-2 text-[12px] text-kv-muted-fg">{description}</p>
+              ) : null}
+              <p className="mt-[10px] text-[18px] font-semibold text-kv-fg">
+                {priceNumber > 0 ? formatPrice(priceNumber) : "Free"}
+              </p>
+              <p className="mt-[2px] inline-flex items-center gap-[5px] text-[12px] text-kv-muted-fg">
+                <Clock3 className="h-[12px] w-[12px]" />
+                {durationText}
+              </p>
+              {benefitList.length ? (
+                <ul className="mt-[10px] space-y-[4px]">
+                  {benefitList.map((item, index) => (
+                    <li key={`${index}-${item}`} className="flex items-start gap-[6px] text-[12px] text-kv-secondary-fg">
+                      <Check className="mt-[2px] h-[12px] w-[12px] shrink-0 text-kv-success" />
+                      <span className="min-w-0 break-words">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="mt-[12px] flex h-[30px] items-center justify-center rounded-[8px] bg-kv-fg text-[12px] font-medium text-white">
+                {ctaLabel?.trim() || (priceNumber > 0 ? "Buy access" : "Join free")}
               </div>
             </div>
-            <p className="mt-3 text-xs text-kv-muted-fg">
-              {isActive === "true"
-                ? "Active plans appear on the public memberships page."
-                : "Inactive plans stay hidden from public signup."}
+            <p className="px-[8px] pb-[4px] pt-[8px] text-[11px] leading-[1.45] text-kv-muted-fg">
+              {archived
+                ? "Archived plans are hidden from signup."
+                : isActive === "true"
+                  ? `Live at /memberships#plan-${slug || "plan-slug"}`
+                  : "Hidden plans stay off the public page."}
             </p>
-          </div></div>
+          </div>
             </div>
           </div>
 
