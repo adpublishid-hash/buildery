@@ -14,6 +14,7 @@ import {
   MessagesSquare,
   PlugZap,
   RefreshCw,
+  Search,
   Target,
   Trash2,
   Truck,
@@ -48,6 +49,7 @@ import {
   deleteIntegrationConnectionAction,
   rotateIntegrationWebhookAction,
   saveIntegrationConnectionAction,
+  searchKiriminajaDistrictsAction,
   setIntegrationEnabledAction,
   setPrimaryIntegrationAction,
   testIntegrationConnectionAction,
@@ -60,6 +62,8 @@ import { cn } from "@/lib/utils";
 const CATEGORY_NOTE: Partial<Record<ProviderDefinition["category"], string>> = {
   EMAIL: "While enabled, store emails go out through the default email provider instead of Mailketing or Gmail. Providers with a list ID also collect new customers and form leads.",
   PAYMENT: "While enabled, checkout sends buyers to the default payment gateway instead of Midtrans. Payments are only marked paid after the status is re-checked with the gateway.",
+  INBOX: "Messages arrive in Inbox next to WhatsApp, and replies go back on the same channel.",
+  SHIPPING: "While enabled, checkout quotes live rates from this courier aggregator instead of RajaOngkir. Buyers pick their kecamatan from its own address list.",
 };
 
 type ChipState = "connected" | "error" | "untested" | "off" | "unavailable";
@@ -481,6 +485,13 @@ function ConnectPanel({
               ) : field.help ? (
                 <p className="text-[11px] leading-[1.45] text-kv-muted-fg">{field.help}</p>
               ) : null}
+              {field.lookup === "kiriminaja-district" && canEdit ? (
+                <DistrictLookup
+                  mode={values.mode}
+                  apiKey={secrets.apiKey}
+                  onPick={(id) => setValues((current) => ({ ...current, [field.key]: id }))}
+                />
+              ) : null}
             </div>
           );
         })}
@@ -620,6 +631,78 @@ function ConnectPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+/** Searches KiriminAja's kecamatan list and fills the picked id into the field. */
+function DistrictLookup({ mode, apiKey, onPick }: { mode?: string; apiKey?: string; onPick: (id: string) => void }) {
+  const [keyword, setKeyword] = useState("");
+  const [results, setResults] = useState<{ id: string; label: string }[] | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [searching, startSearch] = useTransition();
+
+  function search() {
+    setError(null);
+    startSearch(async () => {
+      const res = await searchKiriminajaDistrictsAction({ keyword, mode, apiKey });
+      if (!res.ok) {
+        setError(res.error);
+        setResults(null);
+        return;
+      }
+      setResults(res.data ?? []);
+    });
+  }
+
+  return (
+    <div className="rounded-[10px] border-[0.8px] border-kv-border bg-kv-muted/40 p-[10px]">
+      <div className="flex gap-[6px]">
+        <Input
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (keyword.trim().length >= 3) search();
+            }
+          }}
+          placeholder="Search kecamatan, e.g. Coblong"
+          aria-label="Search kecamatan"
+          className="h-[32px]"
+        />
+        <Button type="button" size="sm" variant="outline" onClick={search} disabled={searching || keyword.trim().length < 3}>
+          {searching ? <Loader2 className="animate-spin" /> : <Search />}
+          Search
+        </Button>
+      </div>
+      {error ? <p className="mt-[6px] text-[11px] text-kv-destructive">{error}</p> : null}
+      {picked ? <p className="mt-[6px] text-[11px] text-kv-muted-fg">Selected: {picked}</p> : null}
+      {results ? (
+        results.length === 0 ? (
+          <p className="mt-[6px] text-[11px] text-kv-muted-fg">No kecamatan matched.</p>
+        ) : (
+          <ul className="mt-[6px] max-h-[180px] overflow-y-auto rounded-[8px] border-[0.8px] border-kv-border bg-kv-card">
+            {results.map((district) => (
+              <li key={district.id}>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-[8px] px-[10px] py-[7px] text-left text-[12px] hover:bg-kv-hover"
+                  onClick={() => {
+                    onPick(district.id);
+                    setPicked(`${district.label} (ID ${district.id})`);
+                    setResults(null);
+                  }}
+                >
+                  <span className="min-w-0 truncate text-kv-fg">{district.label}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-kv-muted-fg">{district.id}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )
+      ) : null}
     </div>
   );
 }

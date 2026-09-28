@@ -65,7 +65,7 @@ import { publicSiteHref } from "@/lib/public-url";
 import { checkoutSchema } from "@/lib/zod";
 import { getMemberSession } from "@/lib/member-auth";
 import { issuePublicAccessToken } from "@/lib/public-access-token";
-import { calculateShipping } from "@/lib/rajaongkir";
+import { quoteShipping, resolveShippingProvider } from "@/lib/shipping/rates";
 import {
   reserveStockForOrder,
   StockReservationError,
@@ -321,7 +321,8 @@ export async function createOrderAction(
       (shipping.cityId || shipping.cityName)
   );
   if (requiresShipping && requestedShippingMethod === "AUTOMATIC") {
-    if (!setting.rajaOngkirApiKey || !setting.shippingOriginCityId) {
+    const shippingProvider = await resolveShippingProvider(workspaceId);
+    if (!shippingProvider) {
       return { ok: false, error: "Ongkir otomatis sedang tidak tersedia." };
     }
     if (
@@ -343,11 +344,11 @@ export async function createOrderAction(
     }, 0);
 
     try {
-      const quotes = await calculateShipping(setting.rajaOngkirApiKey, {
-        origin: setting.shippingOriginCityId,
+      // Re-priced here with the store's own provider: the browser's quote is
+      // only a choice, never a price.
+      const quotes = await quoteShipping(shippingProvider, {
         destination: shipping.cityId,
-        weight: Math.max(1, totalWeightGrams || 1000),
-        couriers: setting.shippingCouriers,
+        weightGrams: Math.max(1, totalWeightGrams || 1000),
         itemValue: subtotal,
       });
       const selectedQuote = quotes.find(

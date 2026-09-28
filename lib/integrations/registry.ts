@@ -17,6 +17,8 @@ export type ProviderField = {
   options?: { value: string; label: string }[];
   /** Used when the field is left empty. */
   defaultValue?: string;
+  /** A search helper under the field that fills in an id (e.g. a kecamatan). */
+  lookup?: "kiriminaja-district";
 };
 
 export type ProviderDefinition = {
@@ -240,14 +242,14 @@ export const PROVIDERS: ProviderDefinition[] = [
     id: "kiriminaja",
     category: "SHIPPING",
     name: "KiriminAja",
-    tagline: "Live rates from 15+ couriers, with COD.",
+    tagline: "Live checkout rates from 15+ couriers.",
     docsUrl: "https://developer.kiriminaja.com/docs",
     capabilities: ["rates"],
     fields: [
       SANDBOX_FIELD,
       { key: "apiKey", label: "API key", type: "secret", required: true, help: "KiriminAja dashboard → Integrasi." },
-      { key: "originDistrictId", label: "Origin kecamatan ID", type: "number", required: true, help: "Search your warehouse's kecamatan in the test panel after saving." },
-      { key: "couriers", label: "Couriers", type: "text", placeholder: "jne,jnt,sicepat,anteraja,idx", help: "Optional, comma-separated. Leave empty for all active couriers." },
+      { key: "originDistrictId", label: "Origin kecamatan ID", type: "number", required: true, lookup: "kiriminaja-district", help: "The kecamatan your parcels ship from. Search it below to fill in the ID." },
+      { key: "couriers", label: "Couriers", type: "text", placeholder: "jne,jnt,sicepat,anteraja,idx", help: "Optional, comma-separated KiriminAja courier codes. Leave empty for every active courier." },
     ],
   },
 ];

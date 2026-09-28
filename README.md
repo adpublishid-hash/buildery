@@ -299,6 +299,34 @@ UTF-8 BOM so non-ASCII characters open cleanly in Excel.
 
 ---
 
+## Integration catalog
+
+Settings → Integrations lists every service a store can connect, grouped the
+way operators think about them. Each card opens a panel to enter credentials,
+test the connection, copy its webhook URL, switch it on, and pick the default
+per category. Credentials are encrypted at rest (`INTEGRATION_SECRET_KEY`) and
+never sent back to the browser.
+
+| Category | Providers | What it does |
+| --- | --- | --- |
+| WhatsApp Gateway | Cloud API, WAHA, Woowa, Kirimi, Starsender, Onesender | Inbox replies and store notifications (WhatsApp tab) |
+| Email & Newsletter | Resend, Brevo, Amazon SES, Kirim.Email, Listmonk (+ Mailketing, Gmail) | Store emails; Brevo/Listmonk also collect buyers and form leads into a list |
+| Payment Gateway | Xendit, Stripe, PayPal, Duitku (+ Midtrans) | Checkout redirects to the default gateway; status is always re-read from the gateway before an order is marked paid |
+| Channel Inbox | Telegram, Messenger, Instagram, Web chat | Conversations in the shared inbox; web chat adds a chat bubble to the storefront |
+| Ads & Pixel | Meta Pixel & CAPI, TikTok, Google | Unchanged (Meta / TikTok / Google tabs) |
+| Courier & Shipping | KiriminAja (+ RajaOngkir) | Live checkout rates from KiriminAja when enabled |
+
+Mengantar is listed but not connectable: it has no public API.
+
+Code map: `lib/integrations/registry.ts` (providers and their fields),
+`connections.ts` (encrypted storage), one folder per category with pure
+request builders (`requests.ts`, unit-tested) and the server side that calls
+them. Every inbound webhook lands on
+`/api/integrations/webhooks/[provider]/[key]`, where the key picks the
+workspace's connection and the provider's own signature is then checked.
+
+---
+
 ## What's new in Part 11 — Midtrans payments
 
 ### Schema changes

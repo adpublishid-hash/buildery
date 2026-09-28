@@ -21,6 +21,7 @@ import { adCurrency, catalogItemId } from "@/lib/ad-catalog";
 import { getMemberSession } from "@/lib/member-auth";
 import { listCustomerAddresses } from "@/lib/customer-addresses";
 import { bundleContents } from "@/lib/bundle-queries";
+import { resolveShippingProvider } from "@/lib/shipping/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -73,9 +74,8 @@ export default async function CheckoutPage({
       sum + (l.product.type === "PHYSICAL" ? (l.product.weightGrams ?? 0) * l.quantity : 0),
     0
   );
-  const shippingEnabled = Boolean(
-    hasPhysical && setting?.rajaOngkirApiKey && setting?.shippingOriginCityId
-  );
+  // Live rates from RajaOngkir or, when connected, KiriminAja.
+  const shippingEnabled = Boolean(hasPhysical && (await resolveShippingProvider(workspace.id)));
   const hasShippingMethod = Boolean(
     !hasPhysical ||
       shippingEnabled ||

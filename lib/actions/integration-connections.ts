@@ -17,6 +17,7 @@ import {
 import { newWebhookKey } from "@/lib/integrations/crypto";
 import { getProvider, secretFieldKeys, type FieldErrors } from "@/lib/integrations/registry";
 import { testConnection } from "@/lib/integrations/test-connection";
+import { kiriminajaDistricts } from "@/lib/shipping/rates";
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string; fieldErrors?: FieldErrors };
 
@@ -149,4 +150,29 @@ export async function rotateIntegrationWebhookAction(connectionId: string): Prom
   if (!updated.count) return { ok: false, error: "Integration not found." };
   refresh();
   return { ok: true };
+}
+
+/**
+ * Finds KiriminAja kecamatan ids for the origin field. Uses the key typed in
+ * the form when there is one (the connection may not be saved yet), else the
+ * stored key; the key never travels back to the browser.
+ */
+export async function searchKiriminajaDistrictsAction(input: {
+  keyword: string;
+  mode?: string;
+  apiKey?: string;
+}): Promise<Result<{ id: string; label: string }[]>> {
+  const ctx = await authorize();
+  if (!ctx) return { ok: false, error: "Not allowed." };
+  const keyword = input.keyword.trim().slice(0, 60);
+  if (keyword.length < 3) return { ok: true, data: [] };
+  const stored = await getConnection(ctx.workspaceId, "kiriminaja");
+  const apiKey = input.apiKey?.trim() || stored?.secrets.apiKey;
+  if (!apiKey) return { ok: false, error: "Enter the KiriminAja API key first." };
+  const mode = input.mode === "production" ? "production" : input.mode === "sandbox" ? "sandbox" : stored?.config.mode ?? "sandbox";
+  try {
+    return { ok: true, data: (await kiriminajaDistricts({ config: { mode } }, apiKey, keyword)).slice(0, 20) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Search failed." };
+  }
 }

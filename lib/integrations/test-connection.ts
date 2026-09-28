@@ -5,6 +5,7 @@ import type { TestResult } from "./http";
 import { testEmailConnection } from "./email/send";
 import { testInboxConnection } from "./inbox/channels";
 import { testPaymentConnection } from "./payments/gateway";
+import { testShippingConnection } from "./shipping/test";
 
 /**
  * Runs the provider's own "is this set up right?" check. Each category adds
@@ -18,6 +19,8 @@ export async function testConnection(connection: LoadedConnection, context: { op
       return testPaymentConnection(connection);
     case "INBOX":
       return testInboxConnection(connection);
+    case "SHIPPING":
+      return testShippingConnection(connection);
     default:
       return { ok: false, error: `Testing ${connection.provider.name} isn't available yet.` };
   }
