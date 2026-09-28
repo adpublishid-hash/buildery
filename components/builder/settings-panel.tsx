@@ -2,7 +2,14 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { MousePointer2, Play, RotateCcw } from "lucide-react";
+import {
+  ClipboardCopy,
+  ClipboardPaste,
+  MousePointer2,
+  Play,
+  RotateCcw,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import type { BuilderFormOption, PreviewDevice } from "./page-builder";
 import type { Block, BlockStyle } from "@/lib/blocks/schema";
@@ -13,9 +20,20 @@ import {
   type BlockAnimation,
 } from "@/lib/blocks/animation";
 import { BLOCK_REGISTRY } from "@/lib/blocks/registry";
+import { EMPTY_BLOCK_STYLE, STYLE_PRESETS } from "@/lib/blocks/style";
+import { readStyleClipboard, writeStyleClipboard } from "@/lib/builder/clipboard";
 import { cn } from "@/lib/utils";
-import { ChoiceField, ColorField, ToggleField } from "./fields";
+import { ChoiceField, ToggleField } from "./fields";
 import { NumberSliderField } from "./settings/shared";
+import {
+  AdvancedSection,
+  BackgroundSection,
+  BorderSection,
+  EffectsSection,
+  LayoutSection,
+  SpacingSection,
+  TypographySection,
+} from "./style-form-sections";
 
 /**
  * Form pengaturan per tipe block dimuat saat dibutuhkan.
@@ -310,13 +328,14 @@ function StyleForm({
   // carry one in their stored JSON; default to an empty style so the editor
   // never crashes reading e.g. `style.visibility`.
   const style = (data.style ?? {}) as BlockStyle;
-  const deviceStyle =
-    activeDevice === "desktop"
-      ? style
-      : ({ ...style, ...(style[activeDevice] ?? {}) } as BlockStyle);
+  const level: Partial<BlockStyle> =
+    activeDevice === "desktop" ? style : (style[activeDevice] ?? {});
+  const deviceOverrides = activeDevice === "desktop" ? 0 : Object.keys(level).length;
+  const setGlobal = (patch: Partial<BlockStyle>) =>
+    onChange({ ...data, style: { ...style, ...patch } });
   const setStyle = (patch: Partial<BlockStyle>) => {
     if (activeDevice === "desktop") {
-      onChange({ ...data, style: { ...style, ...patch } });
+      setGlobal(patch);
       return;
     }
     onChange({
@@ -327,219 +346,174 @@ function StyleForm({
       },
     });
   };
+  const sectionProps = { style, device: activeDevice, level, setStyle, setGlobal };
+
+  function copyStyle() {
+    writeStyleClipboard(style);
+    toast.success("Style disalin. Pilih block lain lalu klik Tempel.");
+  }
+
+  function pasteStyle() {
+    const copied = readStyleClipboard();
+    if (!copied) {
+      toast.error("Belum ada style yang disalin.");
+      return;
+    }
+    // Identity stays with the block: its anchor, visibility and hidden flag.
+    setGlobal({
+      ...copied,
+      anchorId: style.anchorId ?? "",
+      hidden: Boolean(style.hidden),
+      visibility: style.visibility ?? "all",
+    });
+    toast.success("Style ditempel.");
+  }
+
+  function resetStyle() {
+    if (activeDevice !== "desktop") {
+      onChange({ ...data, style: { ...style, [activeDevice]: {} } });
+      toast.success(`Pengaturan khusus ${activeDevice} dihapus.`);
+      return;
+    }
+    setGlobal({
+      ...EMPTY_BLOCK_STYLE,
+      anchorId: style.anchorId ?? "",
+      className: style.className ?? "",
+      hidden: Boolean(style.hidden),
+      visibility: style.visibility ?? "all",
+    });
+    toast.success("Style dikembalikan ke default.");
+  }
 
   return (
-    <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
-      <div>
-        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-          Style
-        </p>
-        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-          Atur spacing, warna, font, dan ukuran teks untuk block ini.
-        </p>
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            Style
+          </p>
+          <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+            Spacing, layout, background, tipografi, dan efek block ini.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <IconAction label="Salin style" onClick={copyStyle}>
+            <ClipboardCopy className="h-3.5 w-3.5" />
+          </IconAction>
+          <IconAction label="Tempel style" onClick={pasteStyle}>
+            <ClipboardPaste className="h-3.5 w-3.5" />
+          </IconAction>
+          <IconAction
+            label={activeDevice === "desktop" ? "Reset style" : `Reset style ${activeDevice}`}
+            onClick={resetStyle}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </IconAction>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-900">
-        {(["desktop", "tablet", "mobile"] as const).map((device) => (
-          <button
-            key={device}
-            type="button"
-            onClick={() => onActiveDeviceChange(device)}
-            className={cn(
-              "h-8 rounded-md text-xs font-medium capitalize transition",
-              activeDevice === device
-                ? "bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50"
-                : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-            )}
-          >
-            {device}
-          </button>
-        ))}
+      <div className="space-y-1.5">
+        <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200">
+          Preset cepat
+        </span>
+        <div className="grid grid-cols-4 gap-1">
+          {STYLE_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              title={preset.hint}
+              onClick={() => setGlobal(preset.patch)}
+              className="h-7 truncate rounded-md border border-zinc-200 bg-white px-1 text-[11px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-3 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-900">
+          {(["desktop", "tablet", "mobile"] as const).map((device) => (
+            <button
+              key={device}
+              type="button"
+              onClick={() => onActiveDeviceChange(device)}
+              className={cn(
+                "h-8 rounded-md text-xs font-medium capitalize transition",
+                activeDevice === device
+                  ? "bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50"
+                  : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              )}
+            >
+              {device}
+              {device !== "desktop" && Object.keys(style[device] ?? {}).length > 0 ? (
+                <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-blue-500 align-middle" />
+              ) : null}
+            </button>
+          ))}
+        </div>
+        {activeDevice !== "desktop" ? (
+          <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
+            {deviceOverrides > 0
+              ? `${deviceOverrides} pengaturan khusus ${activeDevice}. Sisanya mengikuti ${activeDevice === "mobile" ? "tablet/desktop" : "desktop"}.`
+              : `Belum ada pengaturan khusus ${activeDevice}; semua mengikuti ${activeDevice === "mobile" ? "tablet/desktop" : "desktop"}.`}
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
         <ChoiceField
-          label="Show on"
+          label="Tampil di"
           value={style.visibility ?? "all"}
-          onChange={(v) =>
-            onChange({ ...data, style: { ...style, visibility: v } })
-          }
+          onChange={(v) => setGlobal({ visibility: v })}
           options={[
-            { value: "all", label: "All devices" },
-            { value: "desktop", label: "Desktop only" },
-            { value: "tablet", label: "Tablet only" },
-            { value: "mobile", label: "Mobile only" },
+            { value: "all", label: "Semua device" },
+            { value: "desktop", label: "Desktop saja" },
+            { value: "tablet", label: "Tablet saja" },
+            { value: "mobile", label: "Mobile saja" },
             { value: "desktop-tablet", label: "Desktop + tablet" },
             { value: "tablet-mobile", label: "Tablet + mobile" },
           ]}
         />
-        <p className="text-[11px] leading-5 text-zinc-500 dark:text-zinc-400">
-          Pakai Duplicate block untuk membuat konten/layout khusus mobile atau
-          desktop tanpa saling menimpa.
-        </p>
+        <ToggleField
+          label="Sembunyikan block"
+          checked={Boolean(style.hidden)}
+          onChange={(v) => setGlobal({ hidden: v })}
+          hint="Block tetap tersimpan di builder tapi tidak tampil di halaman publik."
+        />
       </div>
 
-      <NumberSliderField
-        label="Padding vertical"
-        value={numericStyleValue(deviceStyle.paddingYValue, {
-          default: 0,
-          none: 0,
-          sm: 24,
-          lg: 72,
-          xl: 112,
-        }[deviceStyle.paddingY ?? "default"])}
-        min={0}
-        max={200}
-        step={2}
-        onChange={(v) => setStyle({ paddingYValue: v })}
-      />
-      <NumberSliderField
-        label="Padding horizontal"
-        value={numericStyleValue(deviceStyle.paddingXValue, {
-          default: 0,
-          none: 0,
-          sm: 16,
-          lg: 48,
-        }[deviceStyle.paddingX ?? "default"])}
-        min={0}
-        max={160}
-        step={2}
-        onChange={(v) => setStyle({ paddingXValue: v })}
-      />
-      <NumberSliderField
-        label="Margin vertical"
-        value={numericStyleValue(deviceStyle.marginYValue, {
-          none: 0,
-          sm: 16,
-          md: 32,
-          lg: 56,
-        }[deviceStyle.marginY ?? "none"])}
-        min={0}
-        max={160}
-        step={2}
-        onChange={(v) => setStyle({ marginYValue: v })}
-      />
-      <div className="grid grid-cols-2 gap-2">
-        <ColorField
-          label="Background"
-          value={deviceStyle.backgroundColor}
-          onChange={(v) => setStyle({ backgroundColor: v })}
-          placeholder="#ffffff"
-        />
-        <ColorField
-          label="Text color"
-          value={deviceStyle.textColor}
-          onChange={(v) => setStyle({ textColor: v })}
-          placeholder="#18181b"
-        />
-      </div>
-      <ChoiceField
-        label="Font"
-        value={deviceStyle.fontFamily}
-        onChange={(v) => setStyle({ fontFamily: v })}
-        options={[
-          { value: "default", label: "Default" },
-          { value: "sans", label: "Sans" },
-          { value: "serif", label: "Serif" },
-          { value: "mono", label: "Mono" },
-          { value: "display", label: "Display" },
-        ]}
-      />
-      <div className="grid grid-cols-2 gap-2">
-        <NumberSliderField
-          label="Heading size"
-          value={numericStyleValue(deviceStyle.headingSizeValue, {
-            default: 0,
-            sm: 24,
-            md: 32,
-            lg: 44,
-            xl: 56,
-            "2xl": 72,
-          }[deviceStyle.headingSize ?? "default"])}
-          min={0}
-          max={120}
-          step={1}
-          zeroLabel="Auto"
-          onChange={(v) => setStyle({ headingSizeValue: v })}
-        />
-        <NumberSliderField
-          label="Body size"
-          value={numericStyleValue(deviceStyle.bodySizeValue, {
-            default: 0,
-            sm: 14,
-            md: 16,
-            lg: 20,
-          }[deviceStyle.bodySize ?? "default"])}
-          min={0}
-          max={64}
-          step={1}
-          zeroLabel="Auto"
-          onChange={(v) => setStyle({ bodySizeValue: v })}
-        />
-      </div>
-      <NumberSliderField
-        label="Radius"
-        value={numericStyleValue(deviceStyle.borderRadiusValue, {
-          none: 0,
-          sm: 8,
-          md: 12,
-          lg: 20,
-          xl: 32,
-        }[deviceStyle.borderRadius ?? "none"])}
-        min={0}
-        max={80}
-        step={1}
-        onChange={(v) => setStyle({ borderRadiusValue: v })}
-      />
-      <div className="grid grid-cols-2 gap-2">
-        <ChoiceField
-          label="Border"
-          value={style.border ?? "none"}
-          onChange={(v) => onChange({ ...data, style: { ...style, border: v } })}
-          options={[
-            { value: "none", label: "None" },
-            { value: "sm", label: "Thin" },
-            { value: "md", label: "Thick" },
-          ]}
-        />
-        <ChoiceField
-          label="Shadow"
-          value={style.shadow ?? "none"}
-          onChange={(v) => onChange({ ...data, style: { ...style, shadow: v } })}
-          options={[
-            { value: "none", label: "None" },
-            { value: "sm", label: "Small" },
-            { value: "md", label: "Medium" },
-            { value: "lg", label: "Large" },
-            { value: "xl", label: "X-Large" },
-          ]}
-        />
-      </div>
-      {style.border && style.border !== "none" ? (
-        <ColorField
-          label="Border color"
-          value={style.borderColor}
-          onChange={(v) => onChange({ ...data, style: { ...style, borderColor: v } })}
-          placeholder="#e4e4e7"
-        />
-      ) : null}
-      <ChoiceField
-        label="Text alignment"
-        value={style.textAlign ?? "default"}
-        onChange={(v) => onChange({ ...data, style: { ...style, textAlign: v } })}
-        options={[
-          { value: "default", label: "Default" },
-          { value: "left", label: "Left" },
-          { value: "center", label: "Center" },
-          { value: "right", label: "Right" },
-        ]}
-      />
+      <SpacingSection {...sectionProps} />
+      <LayoutSection {...sectionProps} />
+      <BackgroundSection {...sectionProps} />
+      <TypographySection {...sectionProps} />
+      <BorderSection {...sectionProps} />
+      <EffectsSection {...sectionProps} />
+      <AdvancedSection {...sectionProps} />
     </div>
   );
 }
 
-function numericStyleValue(value: number | undefined, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+function IconAction({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+    >
+      {children}
+    </button>
+  );
 }
 
 function AnimationForm({

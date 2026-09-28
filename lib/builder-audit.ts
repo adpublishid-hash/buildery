@@ -1,4 +1,5 @@
 import type { Block } from "@/lib/blocks/schema";
+import { isBlockHidden } from "@/lib/blocks/style";
 
 export type BuilderAuditIssue = {
   id: string;
@@ -345,6 +346,14 @@ export function auditBuilderPage(
       level: "error",
       label: "Halaman masih kosong",
       detail: "Tambahkan setidaknya satu blok sebelum terbit.",
+    });
+  } else if (blocks.every((block) => isBlockHidden(block.data))) {
+    // Blok tersembunyi tidak dirender publik: halamannya akan tampil kosong.
+    issues.push({
+      id: "empty-page",
+      level: "error",
+      label: "Semua blok disembunyikan",
+      detail: "Tampilkan setidaknya satu blok sebelum terbit.",
     });
   }
   return issues;

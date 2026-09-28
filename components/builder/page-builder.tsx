@@ -23,7 +23,17 @@ import {
   type BuilderHistory,
 } from "@/lib/builder/history";
 import { defaultBlockData, newBlockId } from "@/lib/blocks/registry";
-import { exportPageJson, parsePageJson } from "@/lib/builder/structure";
+import {
+  exportPageJson,
+  insertBlocksAfter,
+  MAX_PAGE_BLOCKS,
+  parsePageJson,
+} from "@/lib/builder/structure";
+import {
+  copyBlockData,
+  readBlockClipboard,
+  writeBlockClipboard,
+} from "@/lib/builder/clipboard";
 
 import { BlockSidebar } from "./block-sidebar";
 import { StructurePanel } from "./structure-panel";
@@ -267,15 +277,71 @@ export function PageBuilder({
   const stepHistoryRef = useRef(stepHistory);
   stepHistoryRef.current = stepHistory;
 
+  /** Adds below the selected block, or at the end when nothing is selected. */
   function addBlock(type: BlockType) {
+    if (blocks.length >= MAX_PAGE_BLOCKS) {
+      toast.error(`Maksimal ${MAX_PAGE_BLOCKS} block per halaman.`);
+      return;
+    }
     const block = {
       id: newBlockId(),
       type,
       data: defaultBlockData(type),
     } as Block;
-    commit((prev) => [...prev, block], "add");
+    const after = selectedId;
+    commit((prev) => insertBlocksAfter(prev, after, [block]), "add");
     setSelectedId(block.id);
     setMobileBlocksOpen(false);
+  }
+
+  /** "+" under a block on the canvas: pick what goes below it. */
+  function requestInsertAfter(id: string) {
+    setSelectedId(id);
+    setLeftTab("add");
+    if (!window.matchMedia("(min-width: 768px)").matches) setMobileBlocksOpen(true);
+  }
+
+  function toggleBlockHidden(id: string) {
+    const target = blocks.find((block) => block.id === id);
+    if (!target) return;
+    const hidden = !target.data.style?.hidden;
+    commit(
+      (prev) =>
+        prev.map((block) =>
+          block.id === id
+            ? ({ ...block, data: { ...block.data, style: { ...block.data.style, hidden } } } as Block)
+            : block
+        ),
+      `hide:${id}`
+    );
+    toast.success(hidden ? "Block disembunyikan dari halaman publik." : "Block ditampilkan lagi.");
+  }
+
+  function copyBlock(id: string) {
+    const source = blocks.find((block) => block.id === id);
+    if (!source) return;
+    writeBlockClipboard(source);
+    toast.success("Block disalin. Tempel dengan Ctrl/⌘ + V, juga di halaman lain.");
+  }
+
+  function pasteBlock() {
+    const copied = readBlockClipboard();
+    if (!copied) {
+      toast.error("Belum ada block yang disalin.");
+      return;
+    }
+    if (blocks.length >= MAX_PAGE_BLOCKS) {
+      toast.error(`Maksimal ${MAX_PAGE_BLOCKS} block per halaman.`);
+      return;
+    }
+    const block = {
+      id: newBlockId(),
+      type: copied.type,
+      data: copyBlockData(copied.data, blocks),
+    } as Block;
+    const after = selectedId;
+    commit((prev) => insertBlocksAfter(prev, after, [block]), "paste");
+    setSelectedId(block.id);
   }
 
   function importHtml(payload: HtmlImportPayload) {
@@ -436,10 +502,14 @@ export function PageBuilder({
   function duplicateBlock(id: string) {
     const source = blocks.find((b) => b.id === id);
     if (!source) return;
+    if (blocks.length >= MAX_PAGE_BLOCKS) {
+      toast.error(`Maksimal ${MAX_PAGE_BLOCKS} block per halaman.`);
+      return;
+    }
     const copy = {
       id: newBlockId(),
       type: source.type,
-      data: JSON.parse(JSON.stringify(source.data)) as Block["data"],
+      data: copyBlockData(source.data, blocks),
     } as Block;
     commit((prev) => {
       const index = prev.findIndex((b) => b.id === id);
@@ -757,8 +827,35 @@ export function PageBuilder({
         return;
       }
 
-      if (typing || !selectedId) return;
+      if (typing) return;
+      // Block shortcuts belong to the canvas, not to an open dialog.
+      if (target?.closest?.("[role='dialog'], [role='alertdialog']")) return;
 
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        pasteBlock();
+        return;
+      }
+
+      if (!selectedId) return;
+
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "c") {
+        // Selected text on the canvas copies as text, as it always has.
+        if (window.getSelection()?.toString()) return;
+        event.preventDefault();
+        copyBlock(selectedId);
+        return;
+      }
+      if (mod && event.shiftKey && event.key.toLowerCase() === "h") {
+        event.preventDefault();
+        toggleBlockHidden(selectedId);
+        return;
+      }
+      if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        moveBlock(selectedId, event.key === "ArrowUp" ? "up" : "down");
+        return;
+      }
       if (mod && event.key.toLowerCase() === "d") {
         event.preventDefault();
         duplicateBlock(selectedId);
@@ -873,6 +970,7 @@ export function PageBuilder({
                 onReorder={reorderBlock}
                 onDuplicate={duplicateBlock}
                 onRemove={removeBlock}
+                onToggleHidden={toggleBlockHidden}
                 onClear={clearBlocks}
                 onExport={exportPage}
                 onImport={importPage}
@@ -896,6 +994,8 @@ export function PageBuilder({
             onReorder={reorderBlock}
             onDuplicate={duplicateBlock}
             onRemove={removeBlock}
+            onToggleHidden={toggleBlockHidden}
+            onInsertAfter={requestInsertAfter}
           />
         </main>
 
@@ -934,6 +1034,7 @@ export function PageBuilder({
                 onReorder={reorderBlock}
                 onDuplicate={duplicateBlock}
                 onRemove={removeBlock}
+                onToggleHidden={toggleBlockHidden}
                 onClear={clearBlocks}
                 onExport={exportPage}
                 onImport={importPage}

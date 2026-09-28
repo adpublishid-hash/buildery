@@ -6,6 +6,7 @@ import { parseBlockData, type Block } from "@/lib/blocks/schema";
 import { resolveIntegratedBlocks } from "@/lib/blocks/integrations";
 import { BlockMotion } from "@/components/blocks/block-motion";
 import { BlockRenderer } from "@/components/blocks/block-renderer";
+import { isBlockHidden } from "@/lib/blocks/style";
 import { builderDesignTokenStyle, parseBuilderDesignTokens } from "@/lib/builder-design-tokens";
 
 export const metadata = { title: "Preview · My Landing" };
@@ -87,7 +88,7 @@ export default async function PreviewPage({
           </div>
         ) : (
           <div className="bg-white">
-            {blocks.map((block) => (
+            {blocks.filter((block) => !isBlockHidden(block.data)).map((block) => (
               <BlockMotion
                 key={block.id}
                 animation={(block.data as { motion?: unknown }).motion}

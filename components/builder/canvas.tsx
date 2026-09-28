@@ -5,11 +5,14 @@ import {
   ArrowDown,
   ArrowUp,
   Copy,
+  Eye,
+  EyeOff,
   LayoutTemplate,
   MousePointer2,
   Sparkles,
   Trash2,
   GripVertical,
+  Plus,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
@@ -45,6 +48,9 @@ type Props = {
   onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
   onDuplicate: (id: string) => void;
   onRemove: (id: string) => void;
+  onToggleHidden: (id: string) => void;
+  /** Opens the block list to add a block right below this one. */
+  onInsertAfter: (id: string) => void;
 };
 
 export function Canvas({
@@ -59,6 +65,8 @@ export function Canvas({
   onReorder,
   onDuplicate,
   onRemove,
+  onToggleHidden,
+  onInsertAfter,
 }: Props) {
   const darkCss = darkModeCss(designTokens);
   const reduce = useReducedMotion();
@@ -117,6 +125,7 @@ export function Canvas({
               const animated = hasCustomAnimation(
                 (block.data as { motion?: unknown }).motion
               );
+              const hidden = Boolean(block.data.style?.hidden);
               return (
                 <motion.div
                   key={block.id}
@@ -167,6 +176,12 @@ export function Canvas({
                       />
                     ) : null}
                   </span>
+                  {hidden ? (
+                    <span className="pointer-events-none absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      <EyeOff className="h-2.5 w-2.5" />
+                      Tersembunyi
+                    </span>
+                  ) : null}
 
                   {/* Toolbar */}
                   <div
@@ -218,6 +233,16 @@ export function Canvas({
                       <ArrowDown className="h-3.5 w-3.5" />
                     </ToolbarButton>
                     <ToolbarButton
+                      label={hidden ? "Tampilkan block" : "Sembunyikan block"}
+                      onClick={() => onToggleHidden(block.id)}
+                    >
+                      {hidden ? (
+                        <Eye className="h-3.5 w-3.5" />
+                      ) : (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      )}
+                    </ToolbarButton>
+                    <ToolbarButton
                       label="Duplicate block"
                       onClick={() => onDuplicate(block.id)}
                     >
@@ -237,8 +262,27 @@ export function Canvas({
                     replayToken={animationReplayToken}
                     disabled={animationReplayToken === 0}
                   >
-                    <BlockRenderer block={block} previewDevice={previewDevice} />
+                    <BlockRenderer block={block} previewDevice={previewDevice} editor />
                   </BlockMotion>
+
+                  {/* Add a block right below this one. */}
+                  <button
+                    type="button"
+                    aria-label="Tambah block di bawah"
+                    title="Tambah block di bawah"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onInsertAfter(block.id);
+                    }}
+                    className={cn(
+                      "absolute left-1/2 z-20 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 opacity-0 shadow-sm transition hover:scale-110 hover:border-zinc-900 hover:text-zinc-950 focus-visible:opacity-100 group-hover:opacity-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300",
+                      // The canvas clips its overflow, so the last one sits inside.
+                      index === blocks.length - 1 ? "bottom-2" : "-bottom-3",
+                      selected && "opacity-100"
+                    )}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
                 </motion.div>
               );
             })}

@@ -138,3 +138,14 @@ export function parsePageJson(text: string): ParsedPageJson {
   }
   return { ok: true, blocks, skipped };
 }
+
+/**
+ * Inserts `added` right after the block `afterId`, or at the end when there
+ * is no such block. New blocks land next to what the user is working on
+ * instead of at the bottom of a long page.
+ */
+export function insertBlocksAfter(blocks: Block[], afterId: string | null, added: Block[]): Block[] {
+  const index = afterId ? blocks.findIndex((block) => block.id === afterId) : -1;
+  if (index === -1) return [...blocks, ...added];
+  return [...blocks.slice(0, index + 1), ...added, ...blocks.slice(index + 1)];
+}

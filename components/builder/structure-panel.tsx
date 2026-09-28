@@ -10,6 +10,7 @@ import {
   ChevronsUpDown,
   Copy,
   Download,
+  Eye,
   EyeOff,
   Globe2,
   GripVertical,
@@ -42,6 +43,7 @@ type Props = {
   onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
   onDuplicate: (id: string) => void;
   onRemove: (id: string) => void;
+  onToggleHidden: (id: string) => void;
   onClear: () => void;
   onExport: () => void;
   onImport: (text: string) => void;
@@ -69,6 +71,7 @@ export function StructurePanel({
   onReorder,
   onDuplicate,
   onRemove,
+  onToggleHidden,
   onClear,
   onExport,
   onImport,
@@ -167,6 +170,7 @@ export function StructurePanel({
             const selected = block.id === selectedId;
             const siteWide = Boolean((block.data as { siteWide?: boolean }).siteWide);
             const visibility = block.data.style?.visibility ?? "all";
+            const hidden = Boolean(block.data.style?.hidden);
             const hint = dropHint?.id === block.id ? dropHint.position : null;
 
             return (
@@ -228,7 +232,8 @@ export function StructurePanel({
                       selected
                         ? "border-kv-fg shadow-[inset_0_0_0_0.4px_#1f2937]"
                         : "border-kv-border hover:border-[#d1d5db]",
-                      dragId === block.id && "opacity-40"
+                      dragId === block.id && "opacity-40",
+                      hidden && "border-dashed"
                     )}
                   >
                     <GripVertical className="h-[14px] w-[14px] shrink-0 cursor-grab text-kv-subtle opacity-0 transition-opacity group-hover:opacity-100" />
@@ -239,7 +244,7 @@ export function StructurePanel({
                       title={summary ?? meta.label}
                     >
                       <Icon className="h-[15px] w-[15px] shrink-0 text-kv-secondary-fg" strokeWidth={1.6} />
-                      <span className="min-w-0 flex-1 truncate text-[13px] text-kv-fg">
+                      <span className={cn("min-w-0 flex-1 truncate text-[13px] text-kv-fg", hidden && "text-kv-muted-fg line-through decoration-kv-subtle")}>
                         {summary ?? meta.label}
                         {summary ? (
                           <span className="ml-[6px] text-[11px] uppercase tracking-[0.02em] text-kv-subtle">
@@ -254,7 +259,11 @@ export function StructurePanel({
                         <Globe2 className="h-[13px] w-[13px]" />
                       </span>
                     ) : null}
-                    {visibility !== "all" ? (
+                    {hidden ? (
+                      <span title="Disembunyikan dari halaman publik" className="shrink-0 text-kv-muted-fg group-hover:hidden">
+                        <EyeOff className="h-[13px] w-[13px]" />
+                      </span>
+                    ) : visibility !== "all" ? (
                       <span title={VISIBILITY_LABEL[visibility] ?? visibility} className="shrink-0 text-kv-muted-fg group-hover:hidden">
                         <EyeOff className="h-[13px] w-[13px]" />
                       </span>
@@ -266,6 +275,9 @@ export function StructurePanel({
                       </RowButton>
                       <RowButton label="Turunkan" onClick={() => onMove(block.id, "down")} disabled={index === blocks.length - 1}>
                         <ArrowDown />
+                      </RowButton>
+                      <RowButton label={hidden ? "Tampilkan" : "Sembunyikan"} onClick={() => onToggleHidden(block.id)}>
+                        {hidden ? <Eye /> : <EyeOff />}
                       </RowButton>
                       <RowButton label="Duplikat" onClick={() => onDuplicate(block.id)} disabled={blocks.length >= 60}>
                         <Copy />

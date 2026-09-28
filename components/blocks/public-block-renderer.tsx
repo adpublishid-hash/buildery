@@ -3,6 +3,7 @@ import dynamic from "next/dynamic";
 
 import type { Block } from "@/lib/blocks/schema";
 import { hasCustomAnimation } from "@/lib/blocks/animation";
+import { isBlockHidden } from "@/lib/blocks/style";
 import { BlockRenderer } from "./block-renderer";
 import { hasFooterBlock } from "@/lib/site-chrome";
 
@@ -36,11 +37,14 @@ type Props = {
  * CSS variable.
  */
 export function PublicBlockRenderer({
-  blocks,
+  blocks: allBlocks,
   accentColor,
   workspaceName,
   designTokens,
 }: Props) {
+  // Blocks hidden in the builder are drafts: they never reach visitors, and a
+  // hidden Footer block must not suppress the default footer either.
+  const blocks = allBlocks.filter((block) => !isBlockHidden(block.data));
   const tokens = designTokens ?? parseBuilderDesignTokens(null, accentColor);
   const darkCss = darkModeCss(tokens);
   // Halaman yang membawa blok Footer sendiri tidak butuh footer tambahan.
@@ -80,10 +84,17 @@ export function PublicBlockRenderer({
         ) : (
           blocks.map((block) => {
             const animation = (block.data as { motion?: unknown }).motion;
+            // Sticky only works on the element whose parent is <main>, so an
+            // animated block moves it onto the animation wrapper.
+            const sticky = Boolean(block.data.style?.sticky);
             // A block left on the defaults renders as plain markup, so the
             // animation runtime is never pulled in for it.
             return hasCustomAnimation(animation) ? (
-              <BlockMotion key={block.id} animation={animation}>
+              <BlockMotion
+                key={block.id}
+                animation={animation}
+                className={sticky ? "bd-block-sticky" : undefined}
+              >
                 <BlockRenderer block={block} />
               </BlockMotion>
             ) : (

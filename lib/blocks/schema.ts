@@ -37,14 +37,77 @@ const blockStyleFields = {
   borderRadiusValue: z.number().min(0).max(80).optional(),
   border: z.enum(["none", "sm", "md"]).default("none"),
   borderColor: str(),
-  shadow: z.enum(["none", "sm", "md", "lg", "xl"]).default("none"),
+  shadow: z.enum(["none", "sm", "md", "lg", "xl", "2xl", "inner", "glow"]).default("none"),
   textAlign: z.enum(["default", "left", "center", "right"]).default("default"),
+  // Per-side spacing. Each one, when set, wins over its axis value above
+  // (paddingYValue / paddingXValue / marginYValue) at the same device level.
+  paddingTopValue: z.number().min(0).max(320).optional(),
+  paddingBottomValue: z.number().min(0).max(320).optional(),
+  paddingLeftValue: z.number().min(0).max(240).optional(),
+  paddingRightValue: z.number().min(0).max(240).optional(),
+  // Negative margins let a section overlap its neighbour.
+  marginTopValue: z.number().min(-240).max(240).optional(),
+  marginBottomValue: z.number().min(-240).max(240).optional(),
+  minHeightValue: z.number().min(0).max(2000).optional(),
+  minHeightUnit: z.enum(["px", "vh"]).optional(),
 };
 
 const blockDeviceStyleSchema = z.object(blockStyleFields).partial().default({});
 
+/**
+ * Style fields that apply to every device at once. Kept out of the tablet /
+ * mobile overrides on purpose: a background image or anchor id that differs
+ * per breakpoint is a second block, not a style tweak.
+ */
+const blockGlobalStyleFields = {
+  /** Hidden blocks stay in the builder but are never rendered publicly. */
+  hidden: z.boolean().default(false),
+  // Layout
+  maxWidthValue: z.number().min(0).max(2000).optional(),
+  verticalAlign: z.enum(["top", "center", "bottom"]).default("top"),
+  // Background
+  backgroundType: z.enum(["color", "gradient", "image"]).default("color"),
+  gradientFrom: str(),
+  gradientTo: str(),
+  gradientAngle: z.number().min(0).max(360).default(135),
+  gradientShape: z.enum(["linear", "radial"]).default("linear"),
+  backgroundImage: z.string().max(2048).default(""),
+  backgroundSize: z.enum(["cover", "contain", "auto"]).default("cover"),
+  backgroundPosition: z
+    .enum(["center", "top", "bottom", "left", "right"])
+    .default("center"),
+  backgroundRepeat: z.boolean().default(false),
+  backgroundFixed: z.boolean().default(false),
+  overlayColor: str(),
+  overlayOpacity: z.number().min(0).max(100).default(0),
+  // Typography
+  headingColor: str(),
+  accentColor: str(),
+  headingWeight: z
+    .enum(["default", "400", "500", "600", "700", "800", "900"])
+    .default("default"),
+  headingTransform: z
+    .enum(["none", "uppercase", "capitalize", "lowercase"])
+    .default("none"),
+  lineHeightValue: z.number().min(0).max(3).optional(),
+  letterSpacingValue: z.number().min(-0.1).max(0.5).optional(),
+  // Border
+  borderWidthValue: z.number().min(0).max(24).optional(),
+  borderStyle: z.enum(["solid", "dashed", "dotted", "double"]).default("solid"),
+  borderSides: z.enum(["all", "top", "bottom", "y", "x"]).default("all"),
+  // Effects
+  opacity: z.number().min(0).max(100).default(100),
+  backdropBlur: z.number().min(0).max(40).default(0),
+  sticky: z.boolean().default(false),
+  clipContent: z.boolean().default(false),
+  // Advanced
+  anchorId: z.string().max(64).default(""),
+  className: z.string().max(200).default(""),
+};
+
 export const blockStyleSchema = z.object({
   ...blockStyleFields,
+  ...blockGlobalStyleFields,
   tablet: blockDeviceStyleSchema,
   mobile: blockDeviceStyleSchema,
 });

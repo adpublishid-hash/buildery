@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { countCertainWhatsappPlaceholders } from "@/lib/builder-audit";
+import { isBlockHidden } from "@/lib/blocks/style";
 
 /**
  * Pemeriksaan terakhir sebelum sebuah halaman boleh terbit.
@@ -23,6 +24,10 @@ export async function publishBlocker(pageId: string): Promise<string | null> {
 
   if (blocks.length === 0) {
     return "Tambahkan setidaknya satu blok sebelum terbit.";
+  }
+  // Blok tersembunyi tidak pernah dirender publik.
+  if (blocks.every((block) => isBlockHidden(block.data))) {
+    return "Semua blok disembunyikan. Tampilkan setidaknya satu blok sebelum terbit.";
   }
 
   const placeholders = countCertainWhatsappPlaceholders(blocks);
