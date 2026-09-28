@@ -56,6 +56,12 @@ import type { ConnectionView } from "@/lib/integrations/connections";
 import { getProvider, providersIn, type ProviderDefinition } from "@/lib/integrations/registry";
 import { cn } from "@/lib/utils";
 
+/** How a connection in each category changes the store's behaviour. */
+const CATEGORY_NOTE: Partial<Record<ProviderDefinition["category"], string>> = {
+  EMAIL: "While enabled, store emails go out through the default email provider instead of Mailketing or Gmail. Providers with a list ID also collect new customers and form leads.",
+  PAYMENT: "While enabled, checkout sends buyers to the default payment gateway instead of Midtrans. Payments are only marked paid after the status is re-checked with the gateway.",
+};
+
 type ChipState = "connected" | "error" | "untested" | "off" | "unavailable";
 
 type Chip =
@@ -370,6 +376,12 @@ function ConnectPanel({
           </a>
         ) : null}
       </SheetHeader>
+
+      {CATEGORY_NOTE[provider.category] ? (
+        <p className="rounded-[10px] border-[0.8px] border-kv-border bg-kv-muted/60 px-[12px] py-[10px] text-[12px] leading-[1.5] text-kv-muted-fg">
+          {CATEGORY_NOTE[provider.category]}
+        </p>
+      ) : null}
 
       {connection ? (
         <div

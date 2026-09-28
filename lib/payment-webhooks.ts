@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { reportError } from "@/lib/error-reporting";
 
 export type PaymentWebhookLogInput = {
+  /** Defaults to "midtrans", the original and only provider before gateways. */
+  provider?: string;
   workspaceId?: string | null;
   paymentId?: string | null;
   result: PaymentWebhookResult;
@@ -25,6 +27,7 @@ export async function recordPaymentWebhookEvent(input: PaymentWebhookLogInput) {
   try {
     await prisma.paymentWebhookEvent.create({
       data: {
+        ...(input.provider ? { provider: input.provider } : {}),
         workspaceId: input.workspaceId ?? null,
         paymentId: input.paymentId ?? null,
         result: input.result,

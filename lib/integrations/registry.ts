@@ -143,7 +143,8 @@ export const PROVIDERS: ProviderDefinition[] = [
     fields: [
       { key: "secretKey", label: "Secret key", type: "secret", required: true, placeholder: "sk_test_… or rk_…" },
       { key: "webhookSecret", label: "Webhook signing secret", type: "secret", required: true, placeholder: "whsec_…" },
-      { key: "currency", label: "Charge currency", type: "text", defaultValue: "IDR", placeholder: "IDR", help: "Three-letter code. Prices are sent as-is in this currency." },
+      { key: "currency", label: "Charge currency", type: "text", defaultValue: "IDR", placeholder: "IDR", help: "Three-letter code the buyer is charged in." },
+      { key: "exchangeRate", label: "Store currency per 1 unit of charge currency", type: "number", placeholder: "1", help: "Leave empty when you charge in your store currency. e.g. 16000 converts Rp prices to USD." },
     ],
   },
   {
@@ -169,7 +170,7 @@ export const PROVIDERS: ProviderDefinition[] = [
     tagline: "Duitku POP: VA, e-wallet, QRIS, retail, and cards.",
     docsUrl: "https://docs.duitku.com/pop/en/",
     capabilities: ["checkout"],
-    webhook: { label: "Callback URL", help: "Sent automatically with each invoice; no dashboard setup needed." },
+    webhook: { label: "Callback URL", help: "Sent automatically with each invoice; nothing to set up in the Duitku dashboard." },
     fields: [
       SANDBOX_FIELD,
       { key: "merchantCode", label: "Merchant code", type: "text", required: true, placeholder: "DXXXX" },

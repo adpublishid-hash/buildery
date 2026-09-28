@@ -14,6 +14,8 @@ import {
 import { publicSiteHref } from "@/lib/public-url";
 import { rateLimitByIp } from "@/lib/rate-limit";
 import { reportError } from "@/lib/error-reporting";
+import { getWorkspaceMidtransConfig } from "@/lib/ecommerce-settings";
+import { startWorkspaceGatewayCheckout } from "@/lib/integrations/payments/checkout";
 
 function appOrigin(req: NextRequest) {
   const env = process.env.NEXT_PUBLIC_APP_URL;
@@ -97,7 +99,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(payment.snapRedirectUrl);
   }
 
-  if (!isMidtransConfigured()) {
+  const customer =
+    payment.order?.customer ??
+    payment.enrollment?.customer ??
+    payment.customerMembership?.customer ??
+    null;
+
+  try {
+    const gateway = await startWorkspaceGatewayCheckout(
+      { ...payment, customer },
+      { origin, accessToken: accessToken! }
+    );
+    if (gateway) return NextResponse.redirect(gateway.url);
+  } catch (error) {
+    reportError("payment gateway resume failed", error, {
+      context: { paymentId: payment.id },
+    });
+    return NextResponse.redirect(finishUrl);
+  }
+
+  // This store's own credentials; falls back to the deployment's env vars.
+  const midtransConfig = await getWorkspaceMidtransConfig(payment.workspaceId);
+  if (!isMidtransConfigured(midtransConfig)) {
     if (
       process.env.NODE_ENV !== "production" &&
       process.env.ALLOW_SIMULATED_PAYMENTS === "true"
@@ -110,12 +133,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(finishUrl);
   }
 
-  const customer =
-    payment.order?.customer ??
-    payment.enrollment?.customer ??
-    payment.customerMembership?.customer ??
-    null;
-
   try {
     const snap = await createSnapTransaction({
       orderId: payment.midtransOrderId,
@@ -127,7 +144,7 @@ export async function GET(req: NextRequest) {
         phone: customer?.phone ?? null,
       },
       finishUrl,
-    });
+    }, midtransConfig);
 
     await prisma.payment.update({
       where: { id: payment.id },
