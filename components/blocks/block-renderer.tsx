@@ -57,27 +57,37 @@ export function BlockRenderer({
   if (!editor && styleData?.hidden) return null;
 
   const rendered = renderBlock(block);
-  const wrapper = blockWrapperProps(styleData);
+  // The builder canvas is narrower than the browser, so it shows the
+  // previewed device's style directly instead of relying on media queries.
+  const wrapper = blockWrapperProps(
+    styleData,
+    block.id,
+    editor ? (previewDevice ?? "desktop") : undefined
+  );
   const visibility = styleData?.visibility ?? "all";
 
   return (
-    <div
-      // A stable hook for the page's custom CSS, e.g. [data-bd-block="hero"].
-      data-bd-block={block.type.toLowerCase()}
-      id={wrapper.id}
-      className={cn(
-        "bd-block-style",
-        `bd-visible-${visibility}`,
-        wrapper.className,
-        !editor && styleData?.sticky && "bd-block-sticky",
-        editor && styleData?.hidden && "bd-editor-hidden",
-        previewDevice === "tablet" && "bd-force-tablet",
-        previewDevice === "mobile" && "bd-force-mobile"
-      )}
-      style={wrapper.style}
-    >
-      {rendered}
-    </div>
+    <>
+      {wrapper.css ? (
+        <style dangerouslySetInnerHTML={{ __html: wrapper.css }} />
+      ) : null}
+      <div
+        // A stable hook for the page's custom CSS, e.g. [data-bd-block="hero"].
+        data-bd-block={block.type.toLowerCase()}
+        id={wrapper.id}
+        className={cn(
+          "bd-block-style",
+          `bd-visible-${visibility}`,
+          wrapper.className,
+          !editor && styleData?.sticky && "bd-block-sticky",
+          editor && styleData?.hidden && "bd-editor-hidden",
+          previewDevice === "tablet" && "bd-force-tablet",
+          previewDevice === "mobile" && "bd-force-mobile"
+        )}
+      >
+        {rendered}
+      </div>
+    </>
   );
 }
 

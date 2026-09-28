@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import { defaultBlockData, newBlockId } from "@/lib/blocks/registry";
 import { blockStyleSchema, parseBlockDataWithReport, type Block } from "@/lib/blocks/schema";
 import {
+  blockStyleCss,
   blockWrapperProps,
+  deviceDeclarations,
   hasCustomStyle,
   isBlockHidden,
   parseStyleClipboard,
+  resolveDeviceStyle,
   resolveSpacing,
   resolveStyleValue,
   safeCssUrl,
@@ -20,8 +23,11 @@ import { copyBlockData, parseClipboardBlock } from "@/lib/builder/clipboard";
 import { insertBlocksAfter } from "@/lib/builder/structure";
 
 const style = (input: Record<string, unknown>) => blockStyleSchema.parse(input);
-const vars = (input: Record<string, unknown>) =>
-  blockWrapperProps(style(input)).style as Record<string, unknown>;
+type Device = "desktop" | "tablet" | "mobile";
+const decl = (input: Record<string, unknown>, device: Device = "desktop") =>
+  deviceDeclarations(style(input), device);
+const vars = (input: Record<string, unknown>, device: Device = "desktop") =>
+  decl(input, device).self as Record<string, string | undefined>;
 
 function textBlock(patch: Record<string, unknown> = {}): Block {
   const data = defaultBlockData("TEXT") as Block["data"];
@@ -55,10 +61,10 @@ describe("block style — backwards compatibility", () => {
   });
 
   it("emits nothing for a default style", () => {
-    const props = blockWrapperProps(style({}));
-    expect(props.className).toEqual([]);
+    const props = blockWrapperProps(style({}), "blk_1");
+    expect(props.className).toEqual(["bd-s-blk_1"]);
     expect(props.id).toBeUndefined();
-    expect(Object.keys(props.style).filter((key) => (props.style as Record<string, unknown>)[key] !== undefined)).toEqual([]);
+    expect(props.css).toBe("");
   });
 
   it("repairs only the over-long new field, keeping the rest of the block", () => {
@@ -101,7 +107,7 @@ describe("block style — spacing", () => {
   it("does not let desktop per-side values shadow a tablet axis override", () => {
     const value = style({ paddingTopValue: 120, tablet: { paddingYValue: 20 } });
     expect(resolveSpacing(value, "tablet").paddingTop).toBe(20);
-    expect(blockWrapperProps(value).style).toMatchObject({ "--bd-tablet-padding-top": "20px" });
+    expect(deviceDeclarations(value, "tablet").self["--bd-block-padding-top"]).toBe("20px");
   });
 
   it("reads other values with breakpoint fallback", () => {
@@ -121,14 +127,15 @@ describe("block style — layout", () => {
   });
 
   it("lets a smaller device switch the min height off with 0", () => {
-    const css = vars({ minHeightValue: 100, minHeightUnit: "vh", mobile: { minHeightValue: 0 } });
-    expect(css["--bd-mobile-min-height"]).toBe("0px");
+    const input = { minHeightValue: 100, minHeightUnit: "vh", mobile: { minHeightValue: 0 } };
+    expect(vars(input, "tablet")["--bd-block-min-height"]).toBe("100vh");
+    expect(vars(input, "mobile")["--bd-block-min-height"]).toBeUndefined();
+    expect(vars(input, "mobile")["--bd-block-display"]).toBeUndefined();
   });
 
-  it("gates the content width on a class", () => {
-    const props = blockWrapperProps(style({ maxWidthValue: 960 }));
-    expect(props.className).toContain("bd-has-max-width");
-    expect(props.style).toMatchObject({ "--bd-block-max-width": "960px" });
+  it("constrains the block root to the content width", () => {
+    expect(decl({ maxWidthValue: 960 }).child).toMatchObject({ "max-width": "960px", width: "100%" });
+    expect(decl({ maxWidthValue: 960, mobile: { maxWidthValue: 0 } }, "mobile").child).toEqual({});
   });
 });
 
@@ -193,7 +200,7 @@ describe("block style — sanitizing", () => {
     expect(slugifyAnchorId("Paket Harga Spesial!")).toBe("paket-harga-spesial-");
     expect(slugifyAnchorId("123 Promo")).toBe("promo");
     expect(sanitizeClassNames('promo  hero-dark "><script> x:y')).toEqual(["promo", "hero-dark"]);
-    const props = blockWrapperProps(style({ anchorId: "harga", className: "promo" }));
+    const props = blockWrapperProps(style({ anchorId: "harga", className: "promo" }), "blk_1");
     expect(props.id).toBe("harga");
     expect(props.className).toContain("promo");
   });
@@ -201,12 +208,10 @@ describe("block style — sanitizing", () => {
 
 describe("block style — border, type and effects", () => {
   it("draws a border on chosen sides", () => {
-    const props = blockWrapperProps(style({ borderWidthValue: 2, borderStyle: "dashed", borderSides: "y", borderColor: "#111" }));
-    expect(props.style).toMatchObject({
+    expect(vars({ borderWidthValue: 2, borderStyle: "dashed", borderSides: "y", borderColor: "#111" })).toMatchObject({
       "--bd-block-border": "2px dashed #111",
-      "--bd-block-border-widths": "2px 0",
+      "border-width": "2px 0",
     });
-    expect(props.className).toContain("bd-has-border-sides");
   });
 
   it("lets a width of 0 switch off a legacy border", () => {
@@ -214,23 +219,16 @@ describe("block style — border, type and effects", () => {
   });
 
   it("scopes the accent color and heading options to the block", () => {
-    const props = blockWrapperProps(
-      style({ accentColor: "#e11d48", headingWeight: "800", headingTransform: "uppercase", lineHeightValue: 1.8 })
-    );
-    expect(props.style).toMatchObject({
-      "--bd-accent": "#e11d48",
-      "--bd-block-heading-weight": "800",
-      "--bd-block-line-height": "1.8",
-    });
-    expect(props.className).toEqual(
-      expect.arrayContaining(["bd-has-heading-weight", "bd-has-heading-transform", "bd-has-line-height"])
-    );
+    const result = decl({ accentColor: "#e11d48", headingWeight: "800", headingTransform: "uppercase", lineHeightValue: 1.8 });
+    expect(result.self["--bd-accent"]).toBe("#e11d48");
+    expect(result.headings).toEqual({ "font-weight": "800", "text-transform": "uppercase" });
+    expect(result.text).toEqual({ "line-height": "1.8" });
   });
 
-  it("applies opacity and backdrop blur inline", () => {
-    expect(blockWrapperProps(style({ opacity: 40, backdropBlur: 12 })).style).toMatchObject({
-      opacity: 0.4,
-      backdropFilter: "blur(12px)",
+  it("applies opacity and backdrop blur", () => {
+    expect(vars({ opacity: 40, backdropBlur: 12 })).toMatchObject({
+      opacity: "0.4",
+      "backdrop-filter": "blur(12px)",
     });
   });
 });
@@ -310,6 +308,7 @@ describe("public rendering", () => {
     expect(html).toContain('id="harga"');
     expect(html).not.toContain("Secret draft");
     expect(html).not.toContain("position: fixed");
+    expect(html).not.toContain("red;");
     expect(html).not.toContain('data-bd-block="footer"');
     expect(html).toContain("data-bd-default-footer");
   });
@@ -323,5 +322,82 @@ describe("publish audit with hidden blocks", () => {
     expect(allHidden).toContainEqual(expect.objectContaining({ id: "empty-page", level: "error" }));
     const oneVisible = auditBuilderPage(settings, [textBlock({ hidden: true }), textBlock()]);
     expect(oneVisible.some((issue) => issue.id === "empty-page")).toBe(false);
+  });
+});
+
+describe("block style — every field can differ per device", () => {
+  const responsive = style({
+    backgroundType: "image",
+    backgroundImage: "/hero.jpg",
+    headingSizeValue: 56,
+    headingWeight: "800",
+    borderWidthValue: 2,
+    shadow: "xl",
+    tablet: { headingSizeValue: 40 },
+    mobile: {
+      backgroundType: "color",
+      backgroundColor: "#111111",
+      headingWeight: "default",
+      borderWidthValue: 0,
+      shadow: "none",
+      textAlign: "center",
+    },
+  });
+
+  it("merges each device over the larger ones", () => {
+    expect(resolveDeviceStyle(responsive, "tablet")).toMatchObject({ headingSizeValue: 40, headingWeight: "800", backgroundType: "image" });
+    expect(resolveDeviceStyle(responsive, "mobile")).toMatchObject({ headingSizeValue: 40, headingWeight: "default", backgroundType: "color" });
+  });
+
+  it("gives each device exactly its own declarations", () => {
+    expect(decl(responsive as unknown as Record<string, unknown>, "desktop").self["--bd-block-heading-size"]).toBe("56px");
+    expect(decl(responsive as unknown as Record<string, unknown>, "tablet").self["--bd-block-heading-size"]).toBe("40px");
+    const mobile = decl(responsive as unknown as Record<string, unknown>, "mobile");
+    expect(mobile.self["--bd-block-bg-image"]).toBeUndefined();
+    expect(mobile.self["--bd-block-bg"]).toBe("#111111");
+    expect(mobile.self["--bd-block-border"]).toBeUndefined();
+    expect(mobile.self["--bd-block-shadow"]).toBeUndefined();
+    expect(mobile.self["--bd-block-text-align"]).toBe("center");
+    // Turning the heading weight back to default on mobile really removes it.
+    expect(mobile.headings).toEqual({});
+  });
+
+  it("keeps devices in separate, non-overlapping media ranges", () => {
+    const css = blockStyleCss(responsive, "bd-s-x");
+    expect(css).toContain("@media (min-width:1024px){");
+    expect(css).toContain("@media (min-width:640px) and (max-width:1023px){");
+    expect(css).toContain("@media (max-width:639px){");
+    expect(css.match(/--bd-block-heading-size:56px/g)).toHaveLength(1);
+  });
+
+  it("shares one rule when devices end up identical", () => {
+    expect(blockStyleCss(style({ paddingYValue: 40 }), "bd-s-x")).toBe(
+      ".bd-block-style.bd-s-x{--bd-block-padding-top:40px;--bd-block-padding-bottom:40px}"
+    );
+    const css = blockStyleCss(style({ paddingYValue: 40, mobile: { paddingYValue: 16 } }), "bd-s-x");
+    expect(css).toMatch(/^@media \(min-width:640px\)\{/);
+    expect(css).toContain("@media (max-width:639px){");
+  });
+
+  it("shows the previewed device in the builder without media queries", () => {
+    const css = blockStyleCss(responsive, "bd-s-x", "mobile");
+    expect(css).not.toContain("@media");
+    expect(css).toContain("--bd-block-bg:#111111");
+  });
+
+  it("scopes by block id and never lets markup out of the style element", () => {
+    const props = blockWrapperProps(style({ paddingYValue: 8 }), "blk</style><script>");
+    expect(props.className[0]).toBe("bd-s-blk__style__script_");
+    expect(props.css).not.toContain("<");
+  });
+
+  it("treats a cleared device color as not set", () => {
+    const value = style({ backgroundColor: "#fff", tablet: { backgroundColor: "" } });
+    expect(resolveStyleValue(value, "tablet", "backgroundColor")).toBe("#fff");
+    expect(deviceDeclarations(value, "tablet").self["--bd-block-bg"]).toBe("#fff");
+  });
+
+  it("does not fill device overrides with defaults", () => {
+    expect(style({ tablet: { headingWeight: "700" } }).tablet).toEqual({ headingWeight: "700" });
   });
 });

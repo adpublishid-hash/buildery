@@ -50,18 +50,6 @@ const blockStyleFields = {
   marginBottomValue: z.number().min(-240).max(240).optional(),
   minHeightValue: z.number().min(0).max(2000).optional(),
   minHeightUnit: z.enum(["px", "vh"]).optional(),
-};
-
-const blockDeviceStyleSchema = z.object(blockStyleFields).partial().default({});
-
-/**
- * Style fields that apply to every device at once. Kept out of the tablet /
- * mobile overrides on purpose: a background image or anchor id that differs
- * per breakpoint is a second block, not a style tweak.
- */
-const blockGlobalStyleFields = {
-  /** Hidden blocks stay in the builder but are never rendered publicly. */
-  hidden: z.boolean().default(false),
   // Layout
   maxWidthValue: z.number().min(0).max(2000).optional(),
   verticalAlign: z.enum(["top", "center", "bottom"]).default("top"),
@@ -98,9 +86,21 @@ const blockGlobalStyleFields = {
   // Effects
   opacity: z.number().min(0).max(100).default(100),
   backdropBlur: z.number().min(0).max(40).default(0),
-  sticky: z.boolean().default(false),
   clipContent: z.boolean().default(false),
-  // Advanced
+};
+
+const blockDeviceStyleSchema = z.object(blockStyleFields).partial().default({});
+
+/**
+ * Style fields that are the block's identity rather than its look, so they
+ * cannot differ per device: whether it renders at all, its anchor id and CSS
+ * classes, and sticky positioning (applied to the element around the block).
+ * Every other style field can be overridden in `tablet` / `mobile`.
+ */
+const blockGlobalStyleFields = {
+  /** Hidden blocks stay in the builder but are never rendered publicly. */
+  hidden: z.boolean().default(false),
+  sticky: z.boolean().default(false),
   anchorId: z.string().max(64).default(""),
   className: z.string().max(200).default(""),
 };

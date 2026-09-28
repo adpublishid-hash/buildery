@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Link2, Link2Off, Monitor } from "lucide-react";
+import { ChevronDown, Link2, Link2Off } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -70,16 +70,6 @@ export function ChangedDot({ label = "Sudah diubah" }: { label?: string }) {
       title={label}
       className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500"
     />
-  );
-}
-
-/** Note shown inside sections that ignore the active device tab. */
-export function AllDevicesNote() {
-  return (
-    <p className="flex items-center gap-1.5 rounded-md bg-zinc-50 px-2 py-1.5 text-[11px] leading-4 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-      <Monitor className="h-3 w-3 shrink-0" />
-      Pengaturan di bagian ini berlaku untuk semua device.
-    </p>
   );
 }
 

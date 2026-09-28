@@ -5,10 +5,12 @@ import { AlignCenter, AlignLeft, AlignRight, Minus } from "lucide-react";
 import type { BlockStyle } from "@/lib/blocks/schema";
 import {
   BODY_SIZE_PRESETS,
+  EMPTY_BLOCK_STYLE,
   HEADING_SIZE_PRESETS,
   RADIUS_PRESETS,
   borderWidth,
   resolveSpacing,
+  resolveDeviceStyle,
   resolveStyleValue,
   sanitizeAnchorId,
   slugifyAnchorId,
@@ -18,7 +20,6 @@ import { ChoiceField, ColorField, TextField, ToggleField } from "./fields";
 import { ImageUrlUpload } from "./image-url-upload";
 import { NumberSliderField } from "./settings/shared";
 import {
-  AllDevicesNote,
   BoxSpacingField,
   ChangedDot,
   QuickPicks,
@@ -30,8 +31,9 @@ import {
 /**
  * The sections of the Style tab. Each receives the whole style plus two
  * writers: `setStyle` lands on the active device level (desktop, or the
- * tablet/mobile override), `setGlobal` always lands on the base style. A
- * field uses whichever matches what the renderer does with it.
+ * tablet/mobile override) and is what every look-related field uses;
+ * `setGlobal` always lands on the base style and is kept for the few fields
+ * that are the same on every device (sticky, anchor id, CSS classes).
  */
 export type StyleSectionProps = {
   style: BlockStyle;
@@ -48,6 +50,29 @@ function num(value: unknown, fallback = 0) {
 
 function isSet(...values: unknown[]) {
   return values.some((value) => value !== undefined && value !== "" && value !== null);
+}
+
+/**
+ * Whether a section differs from what this device would otherwise get: on
+ * desktop, from the defaults; on tablet/mobile, whether this device level
+ * overrides any of the section's fields.
+ */
+function sectionChanged(
+  style: BlockStyle,
+  level: Partial<BlockStyle>,
+  device: StyleDevice,
+  keys: (keyof BlockStyle)[]
+) {
+  if (device !== "desktop") return keys.some((key) => isSet(level[key]));
+  return keys.some(
+    (key) =>
+      isSet(style[key]) &&
+      JSON.stringify(style[key]) !== JSON.stringify(EMPTY_BLOCK_STYLE[key])
+  );
+}
+
+function changedLabel(device: StyleDevice) {
+  return device === "desktop" ? "Sudah diubah" : `Diatur khusus ${device}`;
 }
 
 /* ----- Spacing ----- */
@@ -68,24 +93,14 @@ export function SpacingSection({ style, device, level, setStyle }: StyleSectionP
     isSet(level.marginTopValue, level.marginBottomValue) ||
     spacing.marginTop !== spacing.marginBottom ||
     spacing.marginTop < 0;
-  const changed = isSet(
-    level.paddingYValue,
-    level.paddingXValue,
-    level.marginYValue,
-    level.paddingTopValue,
-    level.paddingBottomValue,
-    level.paddingLeftValue,
-    level.paddingRightValue,
-    level.marginTopValue,
-    level.marginBottomValue
-  );
+  const changed = sectionChanged(style, level, device, ["paddingY", "paddingX", "marginY", "paddingYValue", "paddingXValue", "marginYValue", "paddingTopValue", "paddingBottomValue", "paddingLeftValue", "paddingRightValue", "marginTopValue", "marginBottomValue"]);
 
   return (
     <StyleSection
       title="Spacing"
       description="Padding dan margin, bisa per sisi"
       defaultOpen
-      badge={changed ? <ChangedDot /> : null}
+      badge={changed ? <ChangedDot label={changedLabel(device)} /> : null}
     >
       <BoxSpacingField
         key={`padding-${device}`}
@@ -188,18 +203,18 @@ const WIDTH_PICKS = [
   { value: 1280, label: "1280" },
 ];
 
-export function LayoutSection({ style, device, level, setStyle, setGlobal }: StyleSectionProps) {
-  const maxWidth = num(style.maxWidthValue);
+export function LayoutSection({ style, device, level, setStyle }: StyleSectionProps) {
+  const r = resolveDeviceStyle(style, device);
+  const maxWidth = num(r.maxWidthValue);
   const minHeight = num(resolveStyleValue(style, device, "minHeightValue"));
   const unit = resolveStyleValue(style, device, "minHeightUnit") ?? "px";
-  const changed =
-    maxWidth > 0 || isSet(level.minHeightValue) || style.verticalAlign !== "top";
+  const changed = sectionChanged(style, level, device, ["maxWidthValue", "minHeightValue", "minHeightUnit", "verticalAlign"]);
 
   return (
     <StyleSection
       title="Layout"
       description="Lebar konten, tinggi minimum, posisi isi"
-      badge={changed ? <ChangedDot /> : null}
+      badge={changed ? <ChangedDot label={changedLabel(device)} /> : null}
     >
       <div className="space-y-2">
         <NumberSliderField
@@ -209,12 +224,12 @@ export function LayoutSection({ style, device, level, setStyle, setGlobal }: Sty
           max={1600}
           step={8}
           zeroLabel="Auto"
-          onChange={(v) => setGlobal({ maxWidthValue: v || undefined })}
+          onChange={(v) => setStyle({ maxWidthValue: v || undefined })}
         />
         <QuickPicks
           value={maxWidth}
           options={WIDTH_PICKS}
-          onPick={(v) => setGlobal({ maxWidthValue: v || undefined })}
+          onPick={(v) => setStyle({ maxWidthValue: v || undefined })}
         />
       </div>
       <div className="space-y-2">
@@ -247,20 +262,14 @@ export function LayoutSection({ style, device, level, setStyle, setGlobal }: Sty
       {minHeight > 0 ? (
         <SegmentedField
           label="Posisi isi (vertikal)"
-          value={style.verticalAlign ?? "top"}
+          value={r.verticalAlign ?? "top"}
           options={[
             { value: "top", label: "Atas" },
             { value: "center", label: "Tengah" },
             { value: "bottom", label: "Bawah" },
           ]}
-          onChange={(v) => setGlobal({ verticalAlign: v })}
+          onChange={(v) => setStyle({ verticalAlign: v })}
         />
-      ) : null}
-      {device !== "desktop" ? (
-        <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
-          Lebar maksimum dan posisi isi berlaku di semua device; tinggi minimum
-          bisa berbeda per device (isi 0 untuk mematikannya di device ini).
-        </p>
       ) : null}
     </StyleSection>
   );
@@ -268,16 +277,17 @@ export function LayoutSection({ style, device, level, setStyle, setGlobal }: Sty
 
 /* ----- Background ----- */
 
-export function BackgroundSection({ style, device, level, setStyle, setGlobal }: StyleSectionProps) {
-  const type = style.backgroundType ?? "color";
+export function BackgroundSection({ style, device, level, setStyle }: StyleSectionProps) {
+  const r = resolveDeviceStyle(style, device);
+  const type = r.backgroundType ?? "color";
   const bgColor = resolveStyleValue(style, device, "backgroundColor") ?? "";
-  const changed = type !== "color" || isSet(level.backgroundColor);
+  const changed = sectionChanged(style, level, device, ["backgroundColor", "backgroundType", "gradientFrom", "gradientTo", "gradientAngle", "gradientShape", "backgroundImage", "backgroundSize", "backgroundPosition", "backgroundRepeat", "backgroundFixed", "overlayColor", "overlayOpacity"]);
 
   return (
     <StyleSection
       title="Background"
       description="Warna, gradien, atau gambar dengan overlay"
-      badge={changed ? <ChangedDot /> : null}
+      badge={changed ? <ChangedDot label={changedLabel(device)} /> : null}
     >
       <SegmentedField
         label="Jenis"
@@ -288,8 +298,8 @@ export function BackgroundSection({ style, device, level, setStyle, setGlobal }:
           { value: "image", label: "Gambar" },
         ]}
         onChange={(v) =>
-          setGlobal(
-            v === "gradient" && !style.gradientFrom && !style.gradientTo
+          setStyle(
+            v === "gradient" && !r.gradientFrom && !r.gradientTo
               ? { backgroundType: v, gradientFrom: "#eef2ff", gradientTo: "#fdf2f8" }
               : { backgroundType: v }
           )
@@ -307,35 +317,35 @@ export function BackgroundSection({ style, device, level, setStyle, setGlobal }:
           <div className="grid grid-cols-2 gap-2">
             <ColorField
               label="Dari"
-              value={style.gradientFrom ?? ""}
-              onChange={(v) => setGlobal({ gradientFrom: v })}
+              value={r.gradientFrom ?? ""}
+              onChange={(v) => setStyle({ gradientFrom: v })}
               placeholder="#eef2ff"
             />
             <ColorField
               label="Ke"
-              value={style.gradientTo ?? ""}
-              onChange={(v) => setGlobal({ gradientTo: v })}
+              value={r.gradientTo ?? ""}
+              onChange={(v) => setStyle({ gradientTo: v })}
               placeholder="#fdf2f8"
             />
           </div>
           <SegmentedField
             label="Bentuk"
-            value={style.gradientShape ?? "linear"}
+            value={r.gradientShape ?? "linear"}
             options={[
               { value: "linear", label: "Linear" },
               { value: "radial", label: "Radial" },
             ]}
-            onChange={(v) => setGlobal({ gradientShape: v })}
+            onChange={(v) => setStyle({ gradientShape: v })}
           />
-          {style.gradientShape !== "radial" ? (
+          {r.gradientShape !== "radial" ? (
             <NumberSliderField
               label="Sudut"
-              value={num(style.gradientAngle, 135)}
+              value={num(r.gradientAngle, 135)}
               min={0}
               max={360}
               step={5}
               unit="°"
-              onChange={(v) => setGlobal({ gradientAngle: v })}
+              onChange={(v) => setStyle({ gradientAngle: v })}
             />
           ) : null}
         </>
@@ -345,15 +355,15 @@ export function BackgroundSection({ style, device, level, setStyle, setGlobal }:
         <>
           <ImageUrlUpload
             label="Gambar background"
-            value={style.backgroundImage ?? ""}
-            onChange={(v) => setGlobal({ backgroundImage: v })}
+            value={r.backgroundImage ?? ""}
+            onChange={(v) => setStyle({ backgroundImage: v })}
             placeholder="Upload gambar atau paste URL"
           />
           <div className="grid grid-cols-2 gap-2">
             <ChoiceField
               label="Ukuran"
-              value={style.backgroundSize ?? "cover"}
-              onChange={(v) => setGlobal({ backgroundSize: v })}
+              value={r.backgroundSize ?? "cover"}
+              onChange={(v) => setStyle({ backgroundSize: v })}
               options={[
                 { value: "cover", label: "Penuh (cover)" },
                 { value: "contain", label: "Muat (contain)" },
@@ -362,8 +372,8 @@ export function BackgroundSection({ style, device, level, setStyle, setGlobal }:
             />
             <ChoiceField
               label="Posisi"
-              value={style.backgroundPosition ?? "center"}
-              onChange={(v) => setGlobal({ backgroundPosition: v })}
+              value={r.backgroundPosition ?? "center"}
+              onChange={(v) => setStyle({ backgroundPosition: v })}
               options={[
                 { value: "center", label: "Tengah" },
                 { value: "top", label: "Atas" },
@@ -375,13 +385,13 @@ export function BackgroundSection({ style, device, level, setStyle, setGlobal }:
           </div>
           <ToggleField
             label="Ulangi gambar (pattern)"
-            checked={Boolean(style.backgroundRepeat)}
-            onChange={(v) => setGlobal({ backgroundRepeat: v })}
+            checked={Boolean(r.backgroundRepeat)}
+            onChange={(v) => setStyle({ backgroundRepeat: v })}
           />
           <ToggleField
             label="Efek parallax (fixed)"
-            checked={Boolean(style.backgroundFixed)}
-            onChange={(v) => setGlobal({ backgroundFixed: v })}
+            checked={Boolean(r.backgroundFixed)}
+            onChange={(v) => setStyle({ backgroundFixed: v })}
             hint="Gambar diam saat halaman di-scroll. Otomatis mati di HP/tablet."
           />
         </>
@@ -391,26 +401,20 @@ export function BackgroundSection({ style, device, level, setStyle, setGlobal }:
         <div className="space-y-2">
           <ColorField
             label="Overlay"
-            value={style.overlayColor ?? ""}
-            onChange={(v) => setGlobal({ overlayColor: v })}
+            value={r.overlayColor ?? ""}
+            onChange={(v) => setStyle({ overlayColor: v })}
             placeholder="#000000"
           />
           <NumberSliderField
             label="Kepekatan overlay"
-            value={num(style.overlayOpacity)}
+            value={num(r.overlayOpacity)}
             min={0}
             max={100}
             step={5}
             unit="%"
-            onChange={(v) => setGlobal({ overlayOpacity: v })}
+            onChange={(v) => setStyle({ overlayOpacity: v })}
           />
         </div>
-      ) : null}
-      {device !== "desktop" ? (
-        <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
-          Warna background bisa berbeda per device. Gradien, gambar, dan overlay
-          berlaku di semua device.
-        </p>
       ) : null}
     </StyleSection>
   );
@@ -418,7 +422,8 @@ export function BackgroundSection({ style, device, level, setStyle, setGlobal }:
 
 /* ----- Typography ----- */
 
-export function TypographySection({ style, device, level, setStyle, setGlobal }: StyleSectionProps) {
+export function TypographySection({ style, device, level, setStyle }: StyleSectionProps) {
+  const r = resolveDeviceStyle(style, device);
   const headingSize = num(
     resolveStyleValue(style, device, "headingSizeValue"),
     HEADING_SIZE_PRESETS[resolveStyleValue(style, device, "headingSize") ?? "default"] ?? 0
@@ -428,24 +433,18 @@ export function TypographySection({ style, device, level, setStyle, setGlobal }:
     BODY_SIZE_PRESETS[resolveStyleValue(style, device, "bodySize") ?? "default"] ?? 0
   );
   const textAlign = resolveStyleValue(style, device, "textAlign") ?? "default";
-  const changed =
-    isSet(level.textColor, level.headingSizeValue, level.bodySizeValue) ||
-    (level.textAlign !== undefined && level.textAlign !== "default") ||
-    isSet(style.headingColor, style.accentColor, style.lineHeightValue, style.letterSpacingValue) ||
-    style.fontFamily !== "default" ||
-    style.headingWeight !== "default" ||
-    style.headingTransform !== "none";
+  const changed = sectionChanged(style, level, device, ["fontFamily", "textColor", "headingColor", "accentColor", "headingSize", "headingSizeValue", "bodySize", "bodySizeValue", "textAlign", "headingWeight", "headingTransform", "letterSpacingValue", "lineHeightValue"]);
 
   return (
     <StyleSection
       title="Tipografi"
       description="Font, warna, ukuran, dan perataan teks"
-      badge={changed ? <ChangedDot /> : null}
+      badge={changed ? <ChangedDot label={changedLabel(device)} /> : null}
     >
       <ChoiceField
         label="Font"
-        value={style.fontFamily ?? "default"}
-        onChange={(v) => setGlobal({ fontFamily: v })}
+        value={r.fontFamily ?? "default"}
+        onChange={(v) => setStyle({ fontFamily: v })}
         options={[
           { value: "default", label: "Default tema" },
           { value: "sans", label: "Sans" },
@@ -463,15 +462,15 @@ export function TypographySection({ style, device, level, setStyle, setGlobal }:
         />
         <ColorField
           label="Warna judul"
-          value={style.headingColor ?? ""}
-          onChange={(v) => setGlobal({ headingColor: v })}
+          value={r.headingColor ?? ""}
+          onChange={(v) => setStyle({ headingColor: v })}
           placeholder="ikut teks"
         />
       </div>
       <ColorField
         label="Warna aksen (tombol, ikon, highlight)"
-        value={style.accentColor ?? ""}
-        onChange={(v) => setGlobal({ accentColor: v })}
+        value={r.accentColor ?? ""}
+        onChange={(v) => setStyle({ accentColor: v })}
         placeholder="ikut tema"
       />
       <div className="grid grid-cols-2 gap-2">
@@ -508,8 +507,8 @@ export function TypographySection({ style, device, level, setStyle, setGlobal }:
       <div className="grid grid-cols-2 gap-2">
         <ChoiceField
           label="Tebal judul"
-          value={style.headingWeight ?? "default"}
-          onChange={(v) => setGlobal({ headingWeight: v })}
+          value={r.headingWeight ?? "default"}
+          onChange={(v) => setStyle({ headingWeight: v })}
           options={[
             { value: "default", label: "Default" },
             { value: "400", label: "Regular" },
@@ -522,8 +521,8 @@ export function TypographySection({ style, device, level, setStyle, setGlobal }:
         />
         <ChoiceField
           label="Huruf judul"
-          value={style.headingTransform ?? "none"}
-          onChange={(v) => setGlobal({ headingTransform: v })}
+          value={r.headingTransform ?? "none"}
+          onChange={(v) => setStyle({ headingTransform: v })}
           options={[
             { value: "none", label: "Normal" },
             { value: "uppercase", label: "KAPITAL" },
@@ -534,52 +533,46 @@ export function TypographySection({ style, device, level, setStyle, setGlobal }:
       </div>
       <NumberSliderField
         label="Jarak huruf judul"
-        value={num(style.letterSpacingValue)}
+        value={num(r.letterSpacingValue)}
         min={-0.1}
         max={0.5}
         step={0.01}
         decimals={2}
         unit="em"
         zeroLabel="Normal"
-        onChange={(v) => setGlobal({ letterSpacingValue: v || undefined })}
+        onChange={(v) => setStyle({ letterSpacingValue: v || undefined })}
       />
       <NumberSliderField
         label="Tinggi baris teks"
-        value={num(style.lineHeightValue)}
+        value={num(r.lineHeightValue)}
         min={0}
         max={3}
         step={0.05}
         decimals={2}
         unit=""
         zeroLabel="Auto"
-        onChange={(v) => setGlobal({ lineHeightValue: v || undefined })}
+        onChange={(v) => setStyle({ lineHeightValue: v || undefined })}
       />
-      {device !== "desktop" ? (
-        <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
-          Warna teks, ukuran, dan perataan bisa berbeda per device. Yang lain
-          berlaku di semua device.
-        </p>
-      ) : null}
     </StyleSection>
   );
 }
 
 /* ----- Border & shadow ----- */
 
-export function BorderSection({ style, device, level, setStyle, setGlobal }: StyleSectionProps) {
+export function BorderSection({ style, device, level, setStyle }: StyleSectionProps) {
+  const r = resolveDeviceStyle(style, device);
   const radius = num(
     resolveStyleValue(style, device, "borderRadiusValue"),
     RADIUS_PRESETS[resolveStyleValue(style, device, "borderRadius") ?? "none"] ?? 0
   );
   const width = borderWidth(style);
-  const changed =
-    isSet(level.borderRadiusValue) || width > 0 || (style.shadow ?? "none") !== "none";
+  const changed = sectionChanged(style, level, device, ["borderRadius", "borderRadiusValue", "border", "borderWidthValue", "borderStyle", "borderSides", "borderColor", "shadow"]);
 
   return (
     <StyleSection
       title="Border & bayangan"
       description="Sudut, garis tepi, dan shadow"
-      badge={changed ? <ChangedDot /> : null}
+      badge={changed ? <ChangedDot label={changedLabel(device)} /> : null}
     >
       <NumberSliderField
         label="Sudut membulat"
@@ -596,15 +589,15 @@ export function BorderSection({ style, device, level, setStyle, setGlobal }: Sty
         max={24}
         step={1}
         zeroLabel="Tidak ada"
-        onChange={(v) => setGlobal({ borderWidthValue: v })}
+        onChange={(v) => setStyle({ borderWidthValue: v })}
       />
       {width > 0 ? (
         <>
           <div className="grid grid-cols-2 gap-2">
             <ChoiceField
               label="Gaya garis"
-              value={style.borderStyle ?? "solid"}
-              onChange={(v) => setGlobal({ borderStyle: v })}
+              value={r.borderStyle ?? "solid"}
+              onChange={(v) => setStyle({ borderStyle: v })}
               options={[
                 { value: "solid", label: "Solid" },
                 { value: "dashed", label: "Putus-putus" },
@@ -614,8 +607,8 @@ export function BorderSection({ style, device, level, setStyle, setGlobal }: Sty
             />
             <ChoiceField
               label="Sisi"
-              value={style.borderSides ?? "all"}
-              onChange={(v) => setGlobal({ borderSides: v })}
+              value={r.borderSides ?? "all"}
+              onChange={(v) => setStyle({ borderSides: v })}
               options={[
                 { value: "all", label: "Semua sisi" },
                 { value: "y", label: "Atas & bawah" },
@@ -627,16 +620,16 @@ export function BorderSection({ style, device, level, setStyle, setGlobal }: Sty
           </div>
           <ColorField
             label="Warna garis"
-            value={style.borderColor ?? ""}
-            onChange={(v) => setGlobal({ borderColor: v })}
+            value={r.borderColor ?? ""}
+            onChange={(v) => setStyle({ borderColor: v })}
             placeholder="#e4e4e7"
           />
         </>
       ) : null}
       <ChoiceField
         label="Bayangan"
-        value={style.shadow ?? "none"}
-        onChange={(v) => setGlobal({ shadow: v })}
+        value={r.shadow ?? "none"}
+        onChange={(v) => setStyle({ shadow: v })}
         options={[
           { value: "none", label: "Tidak ada" },
           { value: "sm", label: "Kecil" },
@@ -654,48 +647,45 @@ export function BorderSection({ style, device, level, setStyle, setGlobal }: Sty
 
 /* ----- Effects ----- */
 
-export function EffectsSection({ style, setGlobal }: StyleSectionProps) {
-  const changed =
-    num(style.opacity, 100) < 100 ||
-    num(style.backdropBlur) > 0 ||
-    Boolean(style.sticky) ||
-    Boolean(style.clipContent);
+export function EffectsSection({ style, device, level, setStyle, setGlobal }: StyleSectionProps) {
+  const r = resolveDeviceStyle(style, device);
+  const changed = sectionChanged(style, level, device, ["opacity", "backdropBlur", "clipContent"]) ||
+    (device === "desktop" && Boolean(style.sticky));
 
   return (
     <StyleSection
       title="Efek"
       description="Transparansi, blur kaca, sticky"
-      badge={changed ? <ChangedDot /> : null}
+      badge={changed ? <ChangedDot label={changedLabel(device)} /> : null}
     >
-      <AllDevicesNote />
       <NumberSliderField
         label="Opacity"
-        value={num(style.opacity, 100)}
+        value={num(r.opacity, 100)}
         min={0}
         max={100}
         step={5}
         unit="%"
-        onChange={(v) => setGlobal({ opacity: v })}
+        onChange={(v) => setStyle({ opacity: v })}
       />
       <NumberSliderField
         label="Blur latar (efek kaca)"
-        value={num(style.backdropBlur)}
+        value={num(r.backdropBlur)}
         min={0}
         max={40}
         step={1}
         zeroLabel="Mati"
-        onChange={(v) => setGlobal({ backdropBlur: v })}
+        onChange={(v) => setStyle({ backdropBlur: v })}
       />
       <ToggleField
         label="Menempel di atas saat scroll (sticky)"
         checked={Boolean(style.sticky)}
         onChange={(v) => setGlobal({ sticky: v })}
-        hint="Cocok untuk header atau banner promo. Tidak aktif di kanvas builder."
+        hint="Berlaku di semua device. Cocok untuk header atau banner promo; tidak aktif di kanvas builder."
       />
       <ToggleField
         label="Potong isi yang keluar batas"
-        checked={Boolean(style.clipContent)}
-        onChange={(v) => setGlobal({ clipContent: v })}
+        checked={Boolean(r.clipContent)}
+        onChange={(v) => setStyle({ clipContent: v })}
       />
     </StyleSection>
   );
@@ -711,7 +701,7 @@ export function AdvancedSection({ style, setGlobal }: StyleSectionProps) {
   return (
     <StyleSection
       title="Lanjutan"
-      description="Anchor ID untuk link #, class CSS kustom"
+      description="Anchor ID untuk link #, class CSS kustom (semua device)"
       badge={changed ? <ChangedDot /> : null}
     >
       <TextField

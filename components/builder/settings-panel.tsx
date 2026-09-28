@@ -166,9 +166,9 @@ export function SettingsPanel({
           <div className="space-y-4">
             {previewDevice !== "desktop" ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-                Konten pada block yang sama berlaku untuk semua device. Untuk
-                membuat versi berbeda, duplicate block lalu atur Show on di tab
-                Style.
+                Konten (teks, gambar, tautan) sama untuk semua device. Tampilan
+                bisa berbeda per device tanpa duplikat block: buka tab Style
+                saat mode {previewDevice} aktif.
               </div>
             ) : null}
             <BlockForm
@@ -422,7 +422,7 @@ function StyleForm({
               key={preset.id}
               type="button"
               title={preset.hint}
-              onClick={() => setGlobal(preset.patch)}
+              onClick={() => setStyle(preset.patch)}
               className="h-7 truncate rounded-md border border-zinc-200 bg-white px-1 text-[11px] font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
               {preset.label}
@@ -452,13 +452,19 @@ function StyleForm({
             </button>
           ))}
         </div>
-        {activeDevice !== "desktop" ? (
+        {activeDevice === "desktop" ? (
+          <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
+            Pengaturan desktop jadi dasar untuk semua device. Pilih Tablet atau
+            Mobile untuk membuat tampilan berbeda di device itu, tanpa duplikat
+            block.
+          </p>
+        ) : (
           <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
             {deviceOverrides > 0
               ? `${deviceOverrides} pengaturan khusus ${activeDevice}. Sisanya mengikuti ${activeDevice === "mobile" ? "tablet/desktop" : "desktop"}.`
               : `Belum ada pengaturan khusus ${activeDevice}; semua mengikuti ${activeDevice === "mobile" ? "tablet/desktop" : "desktop"}.`}
           </p>
-        ) : null}
+        )}
       </div>
 
       <div className="space-y-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">

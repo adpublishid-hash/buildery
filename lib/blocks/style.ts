@@ -1,15 +1,17 @@
-import type React from "react";
-
 import { blockStyleSchema, type BlockStyle } from "./schema";
 
 /**
- * Everything the Style tab stores ends up here: one pure function turns a
- * block's `style` object into the inline CSS variables, classes and id that
- * `BlockRenderer` puts on the block wrapper. The builder UI reads values back
- * through the `resolve*` helpers below, so what the panel shows and what the
- * page renders come from the same rules.
+ * Everything the Style tab stores ends up here: pure functions turn a block's
+ * `style` object into scoped CSS (one rule set per device), plus the classes
+ * and id that `BlockRenderer` puts on the block wrapper. The builder UI reads
+ * values back through the `resolve*` helpers below, so what the panel shows
+ * and what the page renders come from the same rules.
  *
- * Values are written into a `style` attribute on the server, where React does
+ * Every style field can be overridden for tablet and mobile. A device gets
+ * the desktop value unless its own level (or, for mobile, the tablet level)
+ * sets one.
+ *
+ * The CSS is written into a <style> element on the server, where React does
  * not escape CSS. Anything free-form (colors, URLs, ids, classes) therefore
  * goes through a sanitizer first: an unsafe value is dropped, never passed on.
  */
@@ -238,7 +240,15 @@ export function resolveSpacing(style: Partial<BlockStyle>, device: StyleDevice):
   };
 }
 
-/** The first level on this device that sets `key`, if any. */
+/** Whether a stored value counts as "set" at a device level. */
+function isSetValue(value: unknown) {
+  return value !== undefined && value !== "";
+}
+
+/**
+ * The first level on this device that sets `key`, if any. An empty string
+ * counts as unset, so clearing a tablet color falls back to desktop again.
+ */
 export function resolveStyleValue<K extends keyof BlockStyle>(
   style: Partial<BlockStyle>,
   device: StyleDevice,
@@ -246,41 +256,24 @@ export function resolveStyleValue<K extends keyof BlockStyle>(
 ): BlockStyle[K] | undefined {
   for (const level of levelsFor(style, device)) {
     const value = (level as Partial<BlockStyle>)[key];
-    if (value !== undefined) return value as BlockStyle[K];
+    if (isSetValue(value)) return value as BlockStyle[K];
   }
   return undefined;
 }
 
-/** Min height a device level sets; an explicit 0 resets a larger breakpoint. */
-function levelMinHeight(level: StyleLevel, isBase: boolean) {
-  if (!isNumber(level.minHeightValue)) return undefined;
-  if (level.minHeightValue <= 0) return isBase ? undefined : "0px";
-  return `${level.minHeightValue}${level.minHeightUnit === "vh" ? "vh" : "px"}`;
-}
-
-function levelTypography(level: StyleLevel) {
-  const radius = isNumber(level.borderRadiusValue)
-    ? Math.max(0, level.borderRadiusValue)
-    : RADIUS_PRESETS[level.borderRadius ?? "none"];
-  const headingSize =
-    isNumber(level.headingSizeValue) && level.headingSizeValue > 0
-      ? level.headingSizeValue
-      : HEADING_SIZE_PRESETS[level.headingSize ?? "default"];
-  const bodySize =
-    isNumber(level.bodySizeValue) && level.bodySizeValue > 0
-      ? level.bodySizeValue
-      : BODY_SIZE_PRESETS[level.bodySize ?? "default"];
-  const textAlign =
-    level.textAlign && level.textAlign !== "default" ? level.textAlign : undefined;
-  return {
-    radius: px(radius),
-    headingSize: px(headingSize),
-    bodySize: px(bodySize),
-    textAlign,
-    fontFamily: FONT_STACKS[level.fontFamily ?? "default"],
-    bg: sanitizeCssColor(level.backgroundColor),
-    color: sanitizeCssColor(level.textColor),
-  };
+/**
+ * Every style field as a device actually gets it: the desktop style with the
+ * tablet override on top and, for mobile, the mobile override on top of that.
+ */
+export function resolveDeviceStyle(style: Partial<BlockStyle>, device: StyleDevice): Partial<BlockStyle> {
+  const merged: Record<string, unknown> = {};
+  for (const level of levelsFor(style, device).reverse()) {
+    for (const [key, value] of Object.entries(level)) {
+      if (key === "tablet" || key === "mobile") continue;
+      if (isSetValue(value)) merged[key] = value;
+    }
+  }
+  return merged as Partial<BlockStyle>;
 }
 
 /* ----- Background, border, effects ----- */
@@ -332,150 +325,212 @@ function borderSideWidths(sides: BlockStyle["borderSides"] | undefined, width: s
   }
 }
 
-/* ----- The wrapper ----- */
-
-export type BlockWrapperProps = {
-  style: React.CSSProperties;
-  className: string[];
-  id?: string;
-};
-
-type CssVars = Record<string, string | number | undefined>;
+/* ----- Per-device CSS ----- */
 
 /**
- * Turns a block's `style` into what its wrapper element needs. Device
- * overrides are emitted as `--bd-tablet-*` / `--bd-mobile-*` variables that
- * the stylesheet swaps in at each breakpoint (and in the builder's device
- * preview), so the same markup serves every screen size.
+ * What one device gets, grouped by where it applies:
+ * - `self`: the block wrapper (mostly `--bd-block-*` variables that
+ *   `.bd-block-style` in globals.css turns into real properties),
+ * - `child`: the block's own root element,
+ * - `headings` / `text`: elements inside the block.
  */
-export function blockWrapperProps(input?: Partial<BlockStyle> | null): BlockWrapperProps {
+export type StyleDeclarations = {
+  self: Record<string, string>;
+  child: Record<string, string>;
+  headings: Record<string, string>;
+  text: Record<string, string>;
+};
+
+export function deviceDeclarations(input: Partial<BlockStyle> | null | undefined, device: StyleDevice): StyleDeclarations {
   const style = input ?? {};
-  const tabletData = style.tablet ?? {};
-  const mobileData = style.mobile ?? {};
-  const className: string[] = [];
-  const vars: CssVars = {};
+  const r = resolveDeviceStyle(style, device);
+  const spacing = resolveSpacing(style, device);
+  const self: Record<string, string> = {};
+  const child: Record<string, string> = {};
+  const headings: Record<string, string> = {};
+  const text: Record<string, string> = {};
+  const set = (target: Record<string, string>, key: string, value: string | undefined) => {
+    if (value !== undefined && value !== "") target[key] = value;
+  };
+  const nonZero = (value: number) => (value !== 0 ? `${value}px` : undefined);
 
-  const levels = [
-    ["block", style, true],
-    ["tablet", tabletData, false],
-    ["mobile", mobileData, false],
-  ] as const;
-
-  let hasRadius = false;
-  let hasMinHeight = false;
-  for (const [prefix, level, isBase] of levels) {
-    const spacing = levelSpacing(level);
-    const type = levelTypography(level);
-    const minHeight = levelMinHeight(level, isBase);
-    if (type.radius) hasRadius = true;
-    if (minHeight && minHeight !== "0px") hasMinHeight = true;
-
-    vars[`--bd-${prefix}-padding-top`] = px(spacing.paddingTop);
-    vars[`--bd-${prefix}-padding-bottom`] = px(spacing.paddingBottom);
-    vars[`--bd-${prefix}-padding-left`] = px(spacing.paddingLeft);
-    vars[`--bd-${prefix}-padding-right`] = px(spacing.paddingRight);
-    vars[`--bd-${prefix}-margin-top`] = px(spacing.marginTop);
-    vars[`--bd-${prefix}-margin-bottom`] = px(spacing.marginBottom);
-    vars[`--bd-${prefix}-bg`] = type.bg;
-    vars[`--bd-${prefix}-color`] = type.color;
-    vars[`--bd-${prefix}-text-color`] = type.color;
-    vars[`--bd-${prefix}-radius`] = type.radius;
-    vars[`--bd-${prefix}-heading-size`] = type.headingSize;
-    vars[`--bd-${prefix}-body-size`] = type.bodySize;
-    vars[`--bd-${prefix}-text-align`] = type.textAlign;
-    vars[`--bd-${prefix}-min-height`] = minHeight;
-  }
-
-  const desktopFont = FONT_STACKS[style.fontFamily ?? "default"];
+  // Spacing
+  set(self, "--bd-block-padding-top", nonZero(spacing.paddingTop));
+  set(self, "--bd-block-padding-right", nonZero(spacing.paddingRight));
+  set(self, "--bd-block-padding-bottom", nonZero(spacing.paddingBottom));
+  set(self, "--bd-block-padding-left", nonZero(spacing.paddingLeft));
+  set(self, "--bd-block-margin-top", nonZero(spacing.marginTop));
+  set(self, "--bd-block-margin-bottom", nonZero(spacing.marginBottom));
 
   // Layout
-  if (isNumber(style.maxWidthValue) && style.maxWidthValue > 0) {
-    className.push("bd-has-max-width");
-    vars["--bd-block-max-width"] = `${style.maxWidthValue}px`;
+  if (isNumber(r.maxWidthValue) && r.maxWidthValue > 0) {
+    child.width = "100%";
+    child["max-width"] = `${r.maxWidthValue}px`;
+    child["margin-left"] = "auto";
+    child["margin-right"] = "auto";
   }
-  if (hasMinHeight) {
-    vars["--bd-block-display"] = "flex";
-    vars["--bd-block-justify"] =
-      style.verticalAlign === "center"
-        ? "center"
-        : style.verticalAlign === "bottom"
-          ? "flex-end"
-          : "flex-start";
+  if (isNumber(r.minHeightValue) && r.minHeightValue > 0) {
+    set(self, "--bd-block-min-height", `${r.minHeightValue}${r.minHeightUnit === "vh" ? "vh" : "px"}`);
+    set(self, "--bd-block-display", "flex");
+    set(
+      self,
+      "--bd-block-justify",
+      r.verticalAlign === "center" ? "center" : r.verticalAlign === "bottom" ? "flex-end" : "flex-start"
+    );
   }
 
+  // Colors & type
+  const radius = isNumber(r.borderRadiusValue)
+    ? Math.max(0, r.borderRadiusValue)
+    : RADIUS_PRESETS[r.borderRadius ?? "none"];
+  const headingSize =
+    isNumber(r.headingSizeValue) && r.headingSizeValue > 0
+      ? r.headingSizeValue
+      : HEADING_SIZE_PRESETS[r.headingSize ?? "default"];
+  const bodySize =
+    isNumber(r.bodySizeValue) && r.bodySizeValue > 0
+      ? r.bodySizeValue
+      : BODY_SIZE_PRESETS[r.bodySize ?? "default"];
+  const textColor = sanitizeCssColor(r.textColor);
+  set(self, "font-family", FONT_STACKS[r.fontFamily ?? "default"]);
+  set(self, "--bd-block-bg", sanitizeCssColor(r.backgroundColor));
+  set(self, "--bd-block-color", textColor);
+  set(self, "--bd-block-text-color", textColor);
+  set(self, "--bd-block-heading-color", sanitizeCssColor(r.headingColor));
+  set(self, "--bd-accent", sanitizeCssColor(r.accentColor));
+  set(self, "--bd-block-radius", px(radius));
+  set(self, "--bd-block-heading-size", px(headingSize));
+  set(self, "--bd-block-body-size", px(bodySize));
+  set(self, "--bd-block-text-align", r.textAlign && r.textAlign !== "default" ? r.textAlign : undefined);
+  if (r.headingWeight && r.headingWeight !== "default") headings["font-weight"] = r.headingWeight;
+  if (r.headingTransform && r.headingTransform !== "none") headings["text-transform"] = r.headingTransform;
+  if (isNumber(r.letterSpacingValue) && r.letterSpacingValue !== 0) {
+    headings["letter-spacing"] = `${r.letterSpacingValue}em`;
+  }
+  if (isNumber(r.lineHeightValue) && r.lineHeightValue > 0) text["line-height"] = String(r.lineHeightValue);
+
   // Background
-  const background = backgroundLayers(style);
+  const background = backgroundLayers(r);
   if (background) {
-    const image = style.backgroundType === "image";
-    const repeat = image && style.backgroundRepeat ? "repeat" : "no-repeat";
-    const size = image ? (style.backgroundSize ?? "cover") : "cover";
-    const position = image ? (style.backgroundPosition ?? "center") : "center";
-    const attachment = image && style.backgroundFixed ? "fixed" : "scroll";
+    const image = r.backgroundType === "image";
+    const repeat = image && r.backgroundRepeat ? "repeat" : "no-repeat";
+    const attachment = image && r.backgroundFixed ? "fixed" : "scroll";
     // The overlay tint, when present, is the first layer and always covers
     // the whole box; the image or gradient under it gets the chosen values.
     const withOverlay = (overlayValue: string, value: string) =>
       background.count > 1 ? `${overlayValue}, ${value}` : value;
-    vars["--bd-block-bg-image"] = background.image;
-    vars["--bd-block-bg-size"] = withOverlay("cover", size);
-    vars["--bd-block-bg-position"] = withOverlay("center", position);
-    vars["--bd-block-bg-repeat"] = withOverlay("no-repeat", repeat);
-    vars["--bd-block-bg-attachment"] = withOverlay(attachment, attachment);
-    if (attachment === "fixed") className.push("bd-bg-fixed");
-  }
-
-  // Typography
-  vars["--bd-block-heading-color"] = sanitizeCssColor(style.headingColor);
-  vars["--bd-accent"] = sanitizeCssColor(style.accentColor);
-  if (style.headingWeight && style.headingWeight !== "default") {
-    className.push("bd-has-heading-weight");
-    vars["--bd-block-heading-weight"] = style.headingWeight;
-  }
-  if (style.headingTransform && style.headingTransform !== "none") {
-    className.push("bd-has-heading-transform");
-    vars["--bd-block-heading-transform"] = style.headingTransform;
-  }
-  if (isNumber(style.lineHeightValue) && style.lineHeightValue > 0) {
-    className.push("bd-has-line-height");
-    vars["--bd-block-line-height"] = String(style.lineHeightValue);
-  }
-  if (isNumber(style.letterSpacingValue) && style.letterSpacingValue !== 0) {
-    className.push("bd-has-letter-spacing");
-    vars["--bd-block-letter-spacing"] = `${style.letterSpacingValue}em`;
+    set(self, "--bd-block-bg-image", background.image);
+    set(self, "--bd-block-bg-size", withOverlay("cover", image ? (r.backgroundSize ?? "cover") : "cover"));
+    set(self, "--bd-block-bg-position", withOverlay("center", image ? (r.backgroundPosition ?? "center") : "center"));
+    set(self, "--bd-block-bg-repeat", withOverlay("no-repeat", repeat));
+    set(self, "--bd-block-bg-attachment", withOverlay(attachment, attachment));
   }
 
   // Border & shadow
-  const width = borderWidth(style);
+  const width = borderWidth(r);
   if (width > 0) {
-    const color = sanitizeCssColor(style.borderColor) ?? "#e4e4e7";
-    vars["--bd-block-border"] = `${width}px ${style.borderStyle ?? "solid"} ${color}`;
-    const sides = borderSideWidths(style.borderSides, `${width}px`);
-    if (sides) {
-      className.push("bd-has-border-sides");
-      vars["--bd-block-border-widths"] = sides;
-    }
+    const color = sanitizeCssColor(r.borderColor) ?? "#e4e4e7";
+    set(self, "--bd-block-border", `${width}px ${r.borderStyle ?? "solid"} ${color}`);
+    set(self, "border-width", borderSideWidths(r.borderSides, `${width}px`));
   }
-  vars["--bd-block-shadow"] = SHADOWS[style.shadow ?? "none"];
+  set(self, "--bd-block-shadow", SHADOWS[r.shadow ?? "none"]);
 
   // Effects
-  const opacity = isNumber(style.opacity) ? style.opacity : 100;
-  const blur = isNumber(style.backdropBlur) ? style.backdropBlur : 0;
-
-  const css: React.CSSProperties = {
-    fontFamily: desktopFont,
-    overflow: hasRadius || style.clipContent ? "hidden" : undefined,
-    opacity: opacity < 100 ? Math.max(0, opacity) / 100 : undefined,
-    backdropFilter: blur > 0 ? `blur(${blur}px)` : undefined,
-    WebkitBackdropFilter: blur > 0 ? `blur(${blur}px)` : undefined,
-  };
-  for (const [key, value] of Object.entries(vars)) {
-    if (value !== undefined && value !== "") {
-      (css as Record<string, unknown>)[key] = value;
-    }
+  if (radius !== undefined || r.clipContent) self.overflow = "hidden";
+  if (isNumber(r.opacity) && r.opacity < 100) self.opacity = String(Math.max(0, r.opacity) / 100);
+  if (isNumber(r.backdropBlur) && r.backdropBlur > 0) {
+    self["backdrop-filter"] = `blur(${r.backdropBlur}px)`;
+    self["-webkit-backdrop-filter"] = `blur(${r.backdropBlur}px)`;
   }
 
-  className.push(...sanitizeClassNames(style.className));
+  return { self, child, headings, text };
+}
 
-  return { style: css, className, id: sanitizeAnchorId(style.anchorId) };
+/** The class that scopes a block's generated CSS; derived from its id. */
+export function blockScopeClass(blockId: string) {
+  return `bd-s-${blockId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}`;
+}
+
+function declarationBlock(entries: Record<string, string>, important = false) {
+  return Object.entries(entries)
+    .map(([key, value]) => `${key}:${value}${important ? " !important" : ""}`)
+    .join(";");
+}
+
+function rulesFor(scope: string, declarations: StyleDeclarations) {
+  const selector = `.bd-block-style.${scope}`;
+  const rules: string[] = [];
+  const add = (target: string, body: string) => {
+    if (body) rules.push(`${target}{${body}}`);
+  };
+  add(selector, declarationBlock(declarations.self));
+  add(`${selector}>*`, declarationBlock(declarations.child));
+  add(`${selector} :where(h1,h2,h3,h4)`, declarationBlock(declarations.headings, true));
+  add(`${selector} :where(p,li,.bd-rich-text)`, declarationBlock(declarations.text, true));
+  return rules.join("");
+}
+
+/** Media ranges matching the visibility breakpoints in globals.css. */
+const RANGES = {
+  desktop: "(min-width:1024px)",
+  tablet: "(min-width:640px) and (max-width:1023px)",
+  mobile: "(max-width:639px)",
+  desktopTablet: "(min-width:640px)",
+  tabletMobile: "(max-width:1023px)",
+} as const;
+
+/**
+ * The CSS for one block. Each device gets its fully resolved declarations in
+ * its own, non-overlapping media range, so a tablet value never has to
+ * "undo" a desktop one — which is what lets every field differ per device.
+ * Devices that end up identical share a rule.
+ *
+ * In the builder (`previewDevice` set) the canvas is narrower than the
+ * browser, so media queries would answer for the wrong width; there the
+ * previewed device's rules apply unconditionally.
+ */
+export function blockStyleCss(
+  input: Partial<BlockStyle> | null | undefined,
+  scope: string,
+  previewDevice?: StyleDevice
+): string {
+  if (previewDevice) return rulesFor(scope, deviceDeclarations(input, previewDevice));
+
+  const desktop = rulesFor(scope, deviceDeclarations(input, "desktop"));
+  const tablet = rulesFor(scope, deviceDeclarations(input, "tablet"));
+  const mobile = rulesFor(scope, deviceDeclarations(input, "mobile"));
+  const media = (range: string, rules: string) => (rules ? `@media ${range}{${rules}}` : "");
+
+  if (desktop === tablet && tablet === mobile) return desktop;
+  if (desktop === tablet) return media(RANGES.desktopTablet, desktop) + media(RANGES.mobile, mobile);
+  if (tablet === mobile) return media(RANGES.desktop, desktop) + media(RANGES.tabletMobile, tablet);
+  return media(RANGES.desktop, desktop) + media(RANGES.tablet, tablet) + media(RANGES.mobile, mobile);
+}
+
+export type BlockWrapperProps = {
+  className: string[];
+  id?: string;
+  /** Scoped CSS to render in a <style> element next to the block. */
+  css: string;
+};
+
+export function blockWrapperProps(
+  input: Partial<BlockStyle> | null | undefined,
+  blockId: string,
+  previewDevice?: StyleDevice
+): BlockWrapperProps {
+  const style = input ?? {};
+  const scope = blockScopeClass(blockId);
+  const className = [scope];
+  const devices: StyleDevice[] = previewDevice ? [previewDevice] : ["desktop", "tablet", "mobile"];
+  if (devices.some((device) => resolveDeviceStyle(style, device).backgroundFixed)) {
+    className.push("bd-bg-fixed");
+  }
+  className.push(...sanitizeClassNames(style.className));
+  // Every value is sanitized on the way in; this only guards the <style>
+  // element itself against a stray "</style>".
+  const css = blockStyleCss(style, scope, previewDevice).replace(/</g, "\\3c ");
+  return { className, id: sanitizeAnchorId(style.anchorId), css };
 }
 
 export function isBlockHidden(data: unknown) {
